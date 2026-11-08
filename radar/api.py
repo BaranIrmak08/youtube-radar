@@ -5,9 +5,11 @@ import urllib.parse
 import urllib.request
 
 from radar.parse import channel_from_api, video_from_api
+from radar.plan import DIL
 
 TABAN = "https://www.googleapis.com/youtube/v3/"
 PARCA = 50
+VIDEO_PART = "snippet,statistics,contentDetails,liveStreamingDetails"
 
 
 class KotaBitti(Exception):
@@ -45,18 +47,20 @@ class YouTube:
              "publishedAfter": after_iso, "regionCode": region}
         if kategori:
             p["videoCategoryId"] = kategori
+        if region in DIL:
+            p["relevanceLanguage"] = DIL[region]
         d = self._get("search", p, 100) or {}
         return [i["id"]["videoId"] for i in d.get("items", []) if i.get("id", {}).get("videoId")]
 
     def trend(self, region: str) -> list[dict]:
-        d = self._get("videos", {"part": "snippet,statistics,contentDetails", "chart": "mostPopular",
+        d = self._get("videos", {"part": VIDEO_PART, "chart": "mostPopular",
                                  "regionCode": region, "maxResults": 50}, 1) or {}
         return [v for v in map(video_from_api, d.get("items", [])) if v]
 
     def videolar(self, ids: list[str]) -> list[dict]:
         out = []
         for i in range(0, len(ids), PARCA):
-            d = self._get("videos", {"part": "snippet,statistics,contentDetails",
+            d = self._get("videos", {"part": VIDEO_PART,
                                      "id": ",".join(ids[i:i + PARCA])}, 1) or {}
             out += [v for v in map(video_from_api, d.get("items", [])) if v]
         return out

@@ -2,7 +2,7 @@ import math
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from radar.plan import DONUSUMLU, SABIT, gunun_aramalari, gunun_ulkeleri
+from radar.plan import DIL, SABIT, gunun_aramalari, gunun_ulkeleri
 from radar.score import normal, skorla, yas_carpani, yeni_kanal_mi
 
 NOW = datetime(2026, 11, 8, 3, 0, tzinfo=timezone.utc)
@@ -54,23 +54,19 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(len(p), 60)
         self.assertEqual(len(set(p)), 60)
 
-    def test_plan_yarisi_sabit(self):
+    def test_plan_yalniz_tr_en_ulkeleri(self):
         p = gunun_aramalari(739000)
-        sabit = [r for r, _ in p if r in SABIT]
-        self.assertEqual(len(sabit), 30)
+        self.assertTrue(all(r in SABIT for r, _ in p))
         for r in SABIT:
-            self.assertGreaterEqual(sabit.count(r), 7)
+            self.assertGreaterEqual(sum(1 for x, _ in p if x == r), 12)
 
     def test_plan_doner(self):
-        a = [x for x in gunun_aramalari(0) if x[0] not in SABIT]
-        b = [x for x in gunun_aramalari(1) if x[0] not in SABIT]
-        self.assertNotEqual(a, b)
+        self.assertNotEqual(gunun_aramalari(0), gunun_aramalari(1))
 
-    def test_ulkeler(self):
-        u = gunun_ulkeleri(0)
-        self.assertEqual(u[:4], SABIT)
-        self.assertEqual(len(u), 7)
-        self.assertTrue(all(x in DONUSUMLU for x in u[4:]))
+    def test_ulkeler_ve_dil(self):
+        self.assertEqual(gunun_ulkeleri(0), SABIT)
+        self.assertEqual(DIL["TR"], "tr")
+        self.assertTrue(all(DIL[r] == "en" for r in SABIT if r != "TR"))
 
 
 if __name__ == "__main__":

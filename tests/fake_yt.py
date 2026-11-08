@@ -12,6 +12,7 @@ class FakeYT:
         self.patla = patla                # bu numaralı çağrıda KotaBitti
         self.cagri = 0
         self.harcanan = 0
+        self.istenen_kanallar = []
 
     def _say(self, m):
         self.cagri += 1
@@ -35,6 +36,7 @@ class FakeYT:
     def kanallar(self, ids):
         if ids:
             self._say(1)
+        self.istenen_kanallar += ids
         return [dict(self.channels[i]) for i in ids if i in self.channels]
 
     def son_yuklemeler(self, uploads_id, adet=20):

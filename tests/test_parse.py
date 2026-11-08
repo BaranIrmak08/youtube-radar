@@ -53,6 +53,21 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(video_from_api(item)["lang"], "tr")
         self.assertIsNone(video_from_api(video_item())["lang"])
 
+    def test_begeni_ve_canli(self):
+        v = video_from_api(video_item(statistics={"viewCount": "1000", "likeCount": "40"}))
+        self.assertEqual(v["likes"], 40)
+        self.assertFalse(v["is_live"])
+        self.assertIsNone(video_from_api(video_item())["likes"])
+        self.assertTrue(video_from_api(video_item(liveStreamingDetails={"actualStartTime": "x"}))["is_live"])
+        item = video_item()
+        item["snippet"]["liveBroadcastContent"] = "live"
+        self.assertTrue(video_from_api(item)["is_live"])
+
+    def test_und_dil_none(self):
+        item = video_item()
+        item["snippet"]["defaultAudioLanguage"] = "und"
+        self.assertIsNone(video_from_api(item)["lang"])
+
     def test_gizli_abone(self):
         ch = channel_from_api({
             "id": "c1",

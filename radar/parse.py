@@ -31,6 +31,8 @@ def video_from_api(item: dict) -> dict | None:
     thumb = (thumbs.get("medium") or thumbs.get("default") or {}).get("url")
     sure = iso_duration_to_seconds((item.get("contentDetails") or {}).get("duration", ""))
     lang = sn.get("defaultAudioLanguage") or sn.get("defaultLanguage")
+    lang = lang.split("-")[0].lower() if lang else None
+    canli = bool(item.get("liveStreamingDetails")) or sn.get("liveBroadcastContent") in ("live", "upcoming")
     return {
         "id": item.get("id"),
         "channel_id": sn.get("channelId"),
@@ -38,11 +40,13 @@ def video_from_api(item: dict) -> dict | None:
         "title": sn.get("title", ""),
         "published": sn.get("publishedAt"),
         "views": views,
+        "likes": _int(stats.get("likeCount")),
+        "is_live": canli,
         "duration_s": sure,
         "is_short": 0 < sure <= SHORT_MAX_SN,
         "thumb": thumb,
         "category_id": sn.get("categoryId"),
-        "lang": lang.split("-")[0].lower() if lang else None,
+        "lang": None if lang in (None, "und", "zxx") else lang,
     }
 
 

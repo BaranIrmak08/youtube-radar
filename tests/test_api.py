@@ -56,6 +56,15 @@ class ApiTest(unittest.TestCase):
         op = SahteOpener()
         YouTube("K", opener=op).ara("TR", "", "2026-11-06T00:00:00Z")
         self.assertNotIn("videoCategoryId", op.urller[0])
+        self.assertIn("relevanceLanguage=tr", op.urller[0])
+        op = SahteOpener()
+        YouTube("K", opener=op).ara("US", "", "x")
+        self.assertIn("relevanceLanguage=en", op.urller[0])
+
+    def test_videolar_canli_bilgisi_ister(self):
+        op = SahteOpener()
+        YouTube("K", opener=op).videolar(["a"])
+        self.assertIn("liveStreamingDetails", op.urller[0])
 
     def test_403_quota(self):
         op = SahteOpener(http_hata(403, b'{"error":{"errors":[{"reason":"quotaExceeded"}]}}'))

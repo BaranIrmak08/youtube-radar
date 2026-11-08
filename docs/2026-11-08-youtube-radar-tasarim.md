@@ -89,6 +89,11 @@ Son birkaç günde **kendi kanalının normalinin çok üstünde** izlenen YouTu
 - Veri: depoda JSON dosyaları. Site tek bir `liste.json` okur, havuz ve geçmiş ayrı dosyalarda tutulur.
 - Depo: `BaranIrmak08/youtube-radar` (herkese açık).
 
+### 9 Kasım ayarı (ilk gerçek taramadan sonra, kullanıcı kararı)
+- **Yalnızca Türkçe ve İngilizce:** Taranan ülkeler TR, US, GB, CA ve AU. Aramalar `relevanceLanguage` ile yapılıyor, dönüşümlü ülkeler kaldırıldı. Dili Türkçe ya da İngilizce olmayan videolar kanal bilgisi çekilmeden elendiği için kota harcamıyor. Halka açılırsa başka diller eklenebilir.
+- **Kat en az 5:** Daha düşük kattaki videolar listelenmiyor.
+- **Ayıklamalar:** Beğeni/izlenme oranı binde 1'in altındaysa video muhtemel reklam sayılıp elenir. Canlı yayınlar ve "- Topic" müzik kanalları da elenir. Haber ve diziler elenmez, kategori filtresiyle gizlenebilir.
+
 ## 6. Kurulumda kullanıcıdan gerekecekler
 1. **YouTube API anahtarı:** Google Cloud'da proje açılır, YouTube Data API v3 etkinleştirilir, anahtar oluşturulur. Ücretsizdir, kart istemez. Ekran ekran rehberlik edilecek.
 2. Anahtarı GitHub deposunun Secrets bölümüne **kullanıcı kendisi** yapıştırır. Anahtar sohbete yazılmaz.
