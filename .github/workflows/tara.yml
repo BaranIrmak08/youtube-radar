@@ -1,8 +1,10 @@
-name: Günlük tarama
+name: Tarama
 
+# Otomatik tarama şimdilik kapalı (site geliştirme aşaması). Yalnızca elle başlatılır.
+# Düzene bağlanınca geri açılacak, örnek:
+#   schedule:
+#     - cron: "0 9 * * *"   # TSİ 12:00, kota TSİ 11:00'de yenilenir
 on:
-  schedule:
-    - cron: "0 3 * * *"   # TSİ 06:00
   workflow_dispatch:
 
 permissions:
