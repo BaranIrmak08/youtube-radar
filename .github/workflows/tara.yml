@@ -1,0 +1,55 @@
+name: Günlük tarama
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # TSİ 06:00
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: tara
+  cancel-in-progress: false
+
+jobs:
+  tara:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.yayin.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Testler
+        run: python -m unittest discover -s tests
+
+      - name: Tarama
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: python -m radar.main
+
+      - name: Veriyi kaydet
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data site/liste.json
+          if ! git diff --cached --quiet; then
+            git commit -m "veri: $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: yayin
+        uses: actions/deploy-pages@v4
