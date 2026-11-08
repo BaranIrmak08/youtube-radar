@@ -1,0 +1,16 @@
+{"guncellendi":"2026-11-09T03:00:00Z","harcanan":9120,"kota_bitti":false,
+"videolar":[
+{"id":"ornek01","title":"Neden kimse bu adayı bilmiyor?","channel_id":"k1","channel_title":"Kayıp Harita","views":420000,"normal":5000,"kat":84.0,"duzeltilmis":120.0,"published":"2026-11-07T09:00:00Z","is_short":true,"thumb":null,"category_id":"27","ulke":"TR"},
+{"id":"ornek02","title":"I tried living like 1850 for a week","channel_id":"k2","channel_title":"SlowHistory","views":350000,"normal":10000,"kat":35.0,"duzeltilmis":70.0,"published":"2026-11-08T01:00:00Z","is_short":false,"thumb":null,"category_id":"22","ulke":"EN"},
+{"id":"ornek03","title":"<img src=x onerror=alert(1)> zararlı başlık denemesi","channel_id":"k3","channel_title":"Test <b>Kanal</b>","views":60000,"normal":2000,"kat":30.0,"duzeltilmis":40.0,"published":"2026-11-06T12:00:00Z","is_short":true,"thumb":null,"category_id":"24","ulke":"TR"},
+{"id":"ornek04","title":"Bu böcek 100 yıl yaşıyor 🐞🔥","channel_id":"k4","channel_title":"Doğa Kısa","views":1100000,"normal":50000,"kat":22.0,"duzeltilmis":31.0,"published":"2026-11-06T18:00:00Z","is_short":true,"thumb":null,"category_id":"15","ulke":"TR"},
+{"id":"ornek05","title":"أغرب مدينة في العالم","channel_id":"k5","channel_title":"عالم غريب","views":240000,"normal":12000,"kat":20.0,"duzeltilmis":28.0,"published":"2026-11-07T06:00:00Z","is_short":false,"thumb":null,"category_id":"19","ulke":"AR"},
+{"id":"ornek06","title":"El robot más barato del mundo","channel_id":"k6","channel_title":"TecnoLab","views":90000,"normal":5000,"kat":18.0,"duzeltilmis":25.0,"published":"2026-11-07T20:00:00Z","is_short":false,"thumb":null,"category_id":"28","ulke":"ES"},
+{"id":"ornek07","title":"Ich habe 30 Tage nur Brot gegessen","channel_id":"k7","channel_title":"Max Testet","views":150000,"normal":20000,"kat":7.5,"duzeltilmis":9.0,"published":"2026-11-03T10:00:00Z","is_short":false,"thumb":null,"category_id":"26","ulke":"DE"},
+{"id":"ornek08","title":"Penaltı golü ama kaleci uyuyor","channel_id":"k8","channel_title":"Saha Kenarı","views":80000,"normal":15000,"kat":5.3,"duzeltilmis":12.0,"published":"2026-11-08T22:00:00Z","is_short":true,"thumb":null,"category_id":"17","ulke":"TR"}
+],
+"yeni_kanallar":[
+{"channel_id":"y1","channel_title":"Gece Hikâyeleri","kanal_yasi_gun":1.5,"video_sayisi":1,"subs":null,"en_iyi":{"id":"ornek11","title":"1977'de bu kasabada ne oldu?","channel_id":"y1","channel_title":"Gece Hikâyeleri","views":1200000,"published":"2026-11-07T23:00:00Z","is_short":true,"thumb":null,"category_id":"24","ulke":"TR"}},
+{"channel_id":"y2","channel_title":"Tiny Kitchen Lab","kanal_yasi_gun":6.0,"video_sayisi":3,"subs":8200,"en_iyi":{"id":"ornek12","title":"Smallest working oven ever","channel_id":"y2","channel_title":"Tiny Kitchen Lab","views":640000,"published":"2026-11-05T15:00:00Z","is_short":true,"thumb":null,"category_id":"26","ulke":"US"}},
+{"channel_id":"y3","channel_title":"Mapas Raros","kanal_yasi_gun":20.0,"video_sayisi":4,"subs":15000,"en_iyi":{"id":"ornek13","title":"El país que no existe","channel_id":"y3","channel_title":"Mapas Raros","views":210000,"published":"2026-11-08T08:00:00Z","is_short":false,"thumb":null,"category_id":"27","ulke":"MX"}}
+]}

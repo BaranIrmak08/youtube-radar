@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube Radar</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>YouTube Radar</h1>
+  <p id="durum" class="soluk">Yükleniyor…</p>
+  <p id="ornek-uyari" class="uyari" hidden>Gerçek veri henüz yok, örnek veri gösteriliyor.</p>
+</header>
+
+<nav class="ust">
+  <div class="sekmeler" role="tablist">
+    <button data-sekme="videolar" class="aktif">Patlayan videolar</button>
+    <button data-sekme="yeni">Yeni kanallar</button>
+  </div>
+  <div class="gorunum">
+    <button data-gorunum="tablo">Tablo</button>
+    <button data-gorunum="kart">Kart</button>
+  </div>
+</nav>
+
+<section class="filtreler">
+  <label>Zaman
+    <select id="f-zaman">
+      <option value="1">Son 24 saat</option>
+      <option value="3" selected>Son 3 gün</option>
+      <option value="7">Son 7 gün</option>
+    </select>
+  </label>
+  <label>Tür
+    <select id="f-tur">
+      <option value="">Hepsi</option>
+      <option value="short">Short</option>
+      <option value="uzun">Uzun</option>
+    </select>
+  </label>
+  <label>Ülke / dil
+    <select id="f-ulke"><option value="">Hepsi</option></select>
+  </label>
+  <label>Kategori
+    <select id="f-kategori"><option value="">Hepsi</option></select>
+  </label>
+</section>
+
+<main>
+  <p id="sayac" class="soluk"></p>
+  <div id="icerik"></div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
