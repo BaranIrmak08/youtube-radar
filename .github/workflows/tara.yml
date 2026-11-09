@@ -6,6 +6,11 @@ name: Tarama
 #     - cron: "0 9 * * *"   # TSİ 12:00, kota TSİ 11:00'de yenilenir
 on:
   workflow_dispatch:
+    inputs:
+      tarama:
+        description: "YouTube taraması yapılsın mı? Hayır: kota harcamadan yalnızca siteyi yayınlar."
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -33,11 +38,13 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: Tarama
+        if: ${{ inputs.tarama }}
         env:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: python -m radar.main
 
       - name: Veriyi kaydet
+        if: ${{ inputs.tarama }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
