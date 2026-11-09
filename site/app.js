@@ -25,9 +25,11 @@ function kisa(n) {
   if (n == null) return "–";
   if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(".", ",") + "M";
   if (n >= 1e3) return Math.round(n / 1e3) + "k";
-  return String(n);
+  return String(Math.round(n));
 }
-function katYaz(k) { return (k >= 10 ? Math.round(k) : k.toFixed(1).replace(".", ",")) + "x"; }
+function katYaz(k) {
+  return (k >= 10 ? Math.round(k).toLocaleString("tr-TR") : k.toFixed(1).replace(".", ",")) + "x";
+}
 
 function yasGun(iso) {
   const ref = new Date(durum.veri.guncellendi).getTime();
@@ -40,6 +42,7 @@ function yasYaz(iso) {
 function tur(v) { return v.is_short ? "Short" : "Uzun"; }
 function ytLink(id) { return "https://www.youtube.com/watch?v=" + encodeURIComponent(id); }
 function ac(id) { window.open(ytLink(id), "_blank", "noopener"); }
+function guvenliResim(u) { return u && /^https:\/\//.test(u) ? u : null; }
 
 function filtrele(v) {
   const zaman = +document.getElementById("f-zaman").value;
@@ -64,23 +67,50 @@ function secenekDoldur() {
   for (const k of kategoriler) sk.append(el("option", { value: k }, KATEGORI[k] || ("Kategori " + k)));
 }
 
+// Hücreler ---------------------------------------------------------------
+
+function videoHucre(v, kanalAdi) {
+  const resim = guvenliResim(v.thumb);
+  const baslik = el("a", { class: "video__baslik", href: ytLink(v.id), target: "_blank", rel: "noopener" }, v.title);
+  baslik.addEventListener("click", e => e.stopPropagation());
+  return el("td", { class: "hucre-video" }, el("div", { class: "video" },
+    resim ? el("img", { class: "video__resim", src: resim, alt: "", loading: "lazy", width: "96", height: "54" })
+          : el("div", { class: "video__resim" }),
+    el("div", { class: "video__metin" }, baslik, el("span", { class: "video__kanal" }, kanalAdi))));
+}
+
+function okuma(v) {
+  return el("div", { class: "okuma" },
+    el("span", { class: "okuma__kat" }, katYaz(v.kat)),
+    el("span", { class: "okuma__toplam" }, kisa(v.views) + " / " + kisa(v.normal)));
+}
+
+function hucre(etiket, icerik, sinif) {
+  return el("td", { class: sinif || null, "data-etiket": etiket }, icerik);
+}
+
+function tablo(basliklar, tbody) {
+  return el("table", null,
+    el("thead", null, el("tr", null, ...basliklar.map(([b, s]) => el("th", { class: s || null, scope: "col" }, b)))),
+    tbody);
+}
+
+// Tablolar ---------------------------------------------------------------
+
 function videoTablo(liste) {
   const tbody = el("tbody");
   for (const v of liste) {
     const tr = el("tr", null,
-      el("td", { class: "kat" }, katYaz(v.kat)),
-      el("td", { class: "baslik" }, v.title),
-      el("td", null, v.channel_title),
-      el("td", { class: "sayi" }, kisa(v.views)),
-      el("td", { class: "sayi" }, kisa(v.normal)),
-      el("td", null, yasYaz(v.published)),
-      el("td", null, tur(v)));
+      el("td", { class: "hucre-okuma" }, okuma(v)),
+      videoHucre(v, v.channel_title),
+      hucre("İzlenme", kisa(v.views), "olcum sag"),
+      hucre("Normali", kisa(v.normal), "olcum sag"),
+      hucre("Yaş", yasYaz(v.published), "olcum"),
+      hucre("Tür", el("span", { class: "etiket" }, tur(v))));
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
-  return el("div", { class: "tablo-kutu" }, el("table", null,
-    el("thead", null, el("tr", null, ...["Kat", "Video", "Kanal", "İzlenme", "Normali", "Yaş", "Tür"].map(b => el("th", null, b)))),
-    tbody));
+  return tablo([["Kat"], ["Video"], ["İzlenme", "sag"], ["Normali", "sag"], ["Yaş"], ["Tür"]], tbody);
 }
 
 function yeniTablo(liste) {
@@ -88,57 +118,151 @@ function yeniTablo(liste) {
   for (const k of liste) {
     const v = k.en_iyi;
     const tr = el("tr", null,
-      el("td", null, k.channel_title),
-      el("td", { class: "baslik" }, v.title),
-      el("td", { class: "sayi kat" }, kisa(v.views)),
-      el("td", null, k.kanal_yasi_gun == null ? "–" : Math.floor(k.kanal_yasi_gun) + " gün"),
-      el("td", { class: "sayi" }, k.video_sayisi ?? "–"),
-      el("td", null, yasYaz(v.published)),
-      el("td", null, tur(v)));
+      el("td", { class: "hucre-okuma" }, el("div", { class: "okuma" },
+        el("span", { class: "okuma__kat" }, kisa(v.views)),
+        el("span", { class: "okuma__toplam" }, "izlenme"))),
+      videoHucre(v, k.channel_title),
+      hucre("Kanal yaşı", k.kanal_yasi_gun == null ? "–" : Math.floor(k.kanal_yasi_gun) + " gün", "olcum sag"),
+      hucre("Video", k.video_sayisi ?? "–", "olcum sag"),
+      hucre("Yaş", yasYaz(v.published), "olcum"),
+      hucre("Tür", el("span", { class: "etiket" }, tur(v))));
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
-  return el("div", { class: "tablo-kutu" }, el("table", null,
-    el("thead", null, el("tr", null, ...["Kanal", "En iyi video", "İzlenme", "Kanal yaşı", "Video", "Yaş", "Tür"].map(b => el("th", null, b)))),
-    tbody));
+  return tablo([["İzlenme"], ["En iyi video"], ["Kanal yaşı", "sag"], ["Video", "sag"], ["Yaş"], ["Tür"]], tbody);
 }
 
-function kart(v, ust, alt) {
+// Kartlar ----------------------------------------------------------------
+
+function bilgi(ciftler) {
+  return el("dl", { class: "kart__bilgi" },
+    ...ciftler.map(([d, t]) => el("div", null, el("dt", null, d), el("dd", { class: "olcum" }, t))));
+}
+
+function kart(v, ust, ciftler) {
   const a = el("a", { class: "kart", href: ytLink(v.id), target: "_blank", rel: "noopener" });
-  if (v.thumb && /^https:\/\//.test(v.thumb)) a.append(el("img", { src: v.thumb, alt: "", loading: "lazy" }));
-  else a.append(el("div", { class: "resimsiz" }));
-  a.append(el("div", { class: "govde" }, ust, el("div", { class: "baslik" }, v.title), el("div", { class: "alt" }, alt)));
+  const resim = guvenliResim(v.thumb);
+  a.append(resim ? el("img", { class: "kart__resim", src: resim, alt: "", loading: "lazy", width: "320", height: "180" })
+                 : el("div", { class: "kart__resim" }));
+  a.append(el("div", { class: "kart__govde" }, ust, el("span", { class: "kart__baslik" }, v.title), bilgi(ciftler)));
   return a;
 }
 
 function videoKartlar(liste) {
-  return el("div", { class: "kartlar" }, ...liste.map(v => kart(v,
-    el("div", { class: "ust-satir" }, el("span", { class: "kat" }, katYaz(v.kat)), " · " + kisa(v.views) + " izlenme (normali " + kisa(v.normal) + ")"),
-    v.channel_title + " · " + yasYaz(v.published) + " · " + tur(v))));
+  return el("div", { class: "kartlar" }, ...liste.map(v => kart(v, okuma(v), [
+    ["Kanal", v.channel_title], ["Yaş", yasYaz(v.published)], ["Tür", tur(v)]])));
 }
 
 function yeniKartlar(liste) {
   return el("div", { class: "kartlar" }, ...liste.map(k => kart(k.en_iyi,
-    el("div", { class: "ust-satir" }, el("span", { class: "kat" }, kisa(k.en_iyi.views)), " izlenme · kanal " +
-      (k.kanal_yasi_gun == null ? "?" : Math.floor(k.kanal_yasi_gun)) + " günlük"),
-    k.channel_title + " · " + (k.video_sayisi ?? "?") + " video · " + tur(k.en_iyi))));
+    el("div", { class: "okuma" }, el("span", { class: "okuma__kat" }, kisa(k.en_iyi.views)),
+      el("span", { class: "okuma__toplam" }, "izlenme")), [
+      ["Kanal", k.channel_title],
+      ["Kanal yaşı", k.kanal_yasi_gun == null ? "?" : Math.floor(k.kanal_yasi_gun) + " gün"],
+      ["Video", k.video_sayisi ?? "?"], ["Tür", tur(k.en_iyi)]])));
+}
+
+// CSV --------------------------------------------------------------------
+
+// Türkçe Excel noktalı virgülü ayırıcı, virgülü ondalık sayar.
+function csvHucre(d) {
+  let s = d == null ? "" : String(d);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;  // Excel'de formül olarak çalışmasın
+  return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvSayi(n, basamak) {
+  return n == null ? "" : (basamak ? n.toFixed(basamak) : String(Math.round(n))).replace(".", ",");
+}
+function csvTarih(iso) { return iso ? iso.replace("T", " ").replace("Z", "") : ""; }
+function kategoriAdi(id) { return id ? (KATEGORI[id] || id) : ""; }
+
+function csvSatirlar(liste) {
+  if (durum.sekme === "videolar") {
+    return [["Kat", "Başlık", "Kanal", "İzlenme", "Kanal normali", "Yayın (UTC)", "Tür", "Dil", "Kategori", "Link"],
+      ...liste.map(v => [csvSayi(v.kat, 2), v.title, v.channel_title, csvSayi(v.views), csvSayi(v.normal),
+        csvTarih(v.published), tur(v), v.ulke, kategoriAdi(v.category_id), ytLink(v.id)])];
+  }
+  return [["Kanal", "En iyi video", "İzlenme", "Kanal yaşı (gün)", "Video sayısı", "Abone", "Yayın (UTC)", "Tür", "Dil", "Kategori", "Link"],
+    ...liste.map(k => {
+      const v = k.en_iyi;
+      return [k.channel_title, v.title, csvSayi(v.views), csvSayi(k.kanal_yasi_gun, 1), csvSayi(k.video_sayisi),
+        csvSayi(k.subs), csvTarih(v.published), tur(v), v.ulke, kategoriAdi(v.category_id), ytLink(v.id)];
+    })];
+}
+
+function csvIndir() {
+  const liste = guncelListe();
+  if (!liste.length) return;
+  const metin = "﻿" + csvSatirlar(liste).map(r => r.map(csvHucre).join(";")).join("\r\n") + "\r\n";
+  const tarih = (durum.veri.guncellendi || new Date().toISOString()).slice(0, 10);
+  const ad = "youtube-radar-" + (durum.sekme === "videolar" ? "videolar" : "yeni-kanallar") + "-" + tarih + ".csv";
+  const url = URL.createObjectURL(new Blob([metin], { type: "text/csv;charset=utf-8" }));
+  const a = el("a", { href: url, download: ad });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Çizim ------------------------------------------------------------------
+
+function guncelListe() {
+  return durum.sekme === "videolar"
+    ? durum.veri.videolar.filter(filtrele)
+    : durum.veri.yeni_kanallar.filter(k => filtrele(k.en_iyi));
+}
+
+function filtreleriSifirla() {
+  document.getElementById("f-zaman").value = "7";
+  for (const id of ["f-tur", "f-ulke", "f-kategori"]) document.getElementById(id).value = "";
+  ciz();
+}
+
+function bosDurum() {
+  const dar = document.getElementById("f-zaman").value !== "7" ||
+    ["f-tur", "f-ulke", "f-kategori"].some(id => document.getElementById(id).value);
+  const kutu = el("div", { class: "bos" },
+    el("p", { class: "bos__ana" }, durum.sekme === "videolar" ? "Bu filtrelerle patlayan video yok." : "Bu filtrelerle yeni kanal yok."),
+    el("p", null, dar ? "Filtreler listeyi daraltıyor. Son 7 güne ve tüm türlere bakabilirsin."
+                      : "Bu taramada uygun video çıkmadı. Bir sonraki tarama listeyi yeniler."));
+  if (dar) {
+    const b = el("button", { type: "button", class: "btn" }, "Filtreleri sıfırla");
+    b.addEventListener("click", filtreleriSifirla);
+    kutu.append(b);
+  }
+  return kutu;
 }
 
 function ciz() {
-  for (const b of document.querySelectorAll("[data-sekme]")) b.classList.toggle("aktif", b.dataset.sekme === durum.sekme);
-  for (const b of document.querySelectorAll("[data-gorunum]")) b.classList.toggle("aktif", b.dataset.gorunum === durum.gorunum);
+  for (const b of document.querySelectorAll("[data-sekme]")) {
+    b.classList.toggle("aktif", b.dataset.sekme === durum.sekme);
+    b.setAttribute("aria-selected", String(b.dataset.sekme === durum.sekme));
+  }
+  for (const b of document.querySelectorAll("[data-gorunum]")) {
+    b.classList.toggle("aktif", b.dataset.gorunum === durum.gorunum);
+    b.setAttribute("aria-pressed", String(b.dataset.gorunum === durum.gorunum));
+  }
   const kutu = document.getElementById("icerik");
   kutu.replaceChildren();
-  let liste, cizici;
-  if (durum.sekme === "videolar") {
-    liste = durum.veri.videolar.filter(filtrele);
-    cizici = durum.gorunum === "tablo" ? videoTablo : videoKartlar;
-  } else {
-    liste = durum.veri.yeni_kanallar.filter(k => filtrele(k.en_iyi));
-    cizici = durum.gorunum === "tablo" ? yeniTablo : yeniKartlar;
-  }
-  document.getElementById("sayac").textContent = liste.length + " sonuç";
-  kutu.append(liste.length ? cizici(liste) : el("div", { class: "bos" }, "Bu filtrelerle sonuç yok."));
+  const liste = guncelListe();
+  const cizici = durum.sekme === "videolar"
+    ? (durum.gorunum === "tablo" ? videoTablo : videoKartlar)
+    : (durum.gorunum === "tablo" ? yeniTablo : yeniKartlar);
+  document.getElementById("sayac").textContent = liste.length.toLocaleString("tr-TR") + " sonuç";
+  const csv = document.getElementById("csv-indir");
+  csv.disabled = !liste.length;
+  csv.title = liste.length ? "Ekrandaki listeyi indir" : "İndirilecek sonuç yok";
+  kutu.append(liste.length ? cizici(liste) : bosDurum());
+}
+
+function durumYaz(veri) {
+  const t = new Date(veri.guncellendi);
+  const p = document.getElementById("durum");
+  p.replaceChildren(
+    el("span", null, "Son tarama ", el("span", { class: "olcum" },
+      t.toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" }))),
+    el("span", null, el("span", { class: "olcum" }, (veri.harcanan ?? 0).toLocaleString("tr-TR")), " birim kota"));
+  if (veri.kota_bitti) p.append(el("span", { class: "kotu" }, "Kota bitti, tarama eksik"));
 }
 
 async function yukle() {
@@ -154,11 +278,7 @@ async function yukle() {
   }
   durum.veri = veri;
   document.getElementById("ornek-uyari").hidden = !ornek;
-  const t = new Date(veri.guncellendi);
-  document.getElementById("durum").textContent = "Son güncelleme: " +
-    t.toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" }) +
-    " · " + (veri.harcanan ?? 0).toLocaleString("tr-TR") + " birim kota" +
-    (veri.kota_bitti ? " · kota bitti, tarama eksik" : "");
+  durumYaz(veri);
   secenekDoldur();
   ciz();
 }
@@ -169,4 +289,10 @@ for (const b of document.querySelectorAll("[data-gorunum]")) b.addEventListener(
   durum.gorunum = b.dataset.gorunum; hafizaYaz("radar.gorunum", durum.gorunum); ciz();
 });
 for (const s of document.querySelectorAll(".filtreler select")) s.addEventListener("change", () => durum.veri && ciz());
-yukle().catch(() => { document.getElementById("durum").textContent = "Veri yüklenemedi."; });
+document.getElementById("csv-indir").addEventListener("click", () => durum.veri && csvIndir());
+yukle().catch(() => {
+  document.getElementById("durum").textContent = "Veri yüklenemedi.";
+  document.getElementById("icerik").replaceChildren(el("div", { class: "bos" },
+    el("p", { class: "bos__ana" }, "Liste yüklenemedi."),
+    el("p", null, "Bağlantını kontrol edip sayfayı yenile. Sorun sürerse liste dosyası henüz yayınlanmamış olabilir.")));
+});

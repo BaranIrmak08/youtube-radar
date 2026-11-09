@@ -2,3 +2,7 @@ __pycache__/
 .superpowers/
 .env
 *.pyc
+
+# Hallmark çalışma dosyaları
+.hallmark/
+site/.hallmark/
