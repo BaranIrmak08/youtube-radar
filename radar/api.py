@@ -42,9 +42,11 @@ class YouTube:
                 pass
         return None
 
-    def ara(self, region: str, kategori: str, after_iso: str) -> list[str]:
+    def ara(self, region: str, kategori: str, after_iso: str, q: str | None = None) -> list[str]:
         p = {"part": "id", "type": "video", "order": "viewCount", "maxResults": 50,
              "publishedAfter": after_iso, "regionCode": region}
+        if q:
+            p["q"] = q
         if kategori:
             p["videoCategoryId"] = kategori
         if region in DIL:

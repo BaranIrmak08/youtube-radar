@@ -92,6 +92,12 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(YouTube("K", opener=op).son_yuklemeler("UU1", 20), ["x", "y"])
         self.assertIn("maxResults=20", op.urller[0])
 
+    def test_ara_konu_ile(self):
+        op = SahteOpener({"items": [{"id": {"videoId": "x"}}]})
+        self.assertEqual(YouTube("K", opener=op).ara("US", "", "2026-11-02T00:00:00Z", q="ai animation"), ["x"])
+        self.assertIn("q=ai+animation", op.urller[0])
+        self.assertNotIn("videoCategoryId", op.urller[0])
+
     def test_son_yuklemeler_tarih_sinirli_sayfali(self):
         def oge(i, t):
             return {"contentDetails": {"videoId": i, "videoPublishedAt": t}}

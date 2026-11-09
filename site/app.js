@@ -1,4 +1,5 @@
 // YouTube Radar arayüzü. Veriler yalnızca textContent ile yazılır (innerHTML'e veri konmaz).
+// Yazma işlemleri (engelleme, konu araması) arkauc.js içindeki window.arkaUc üzerinden gider.
 "use strict";
 
 const KATEGORI = {
@@ -7,17 +8,20 @@ const KATEGORI = {
   "25": "Haber ve Politika", "26": "Nasıl Yapılır", "27": "Eğitim", "28": "Bilim ve Teknoloji",
 };
 
-const durum = { veri: null, sekme: "videolar", gorunum: "tablo", sira: { alan: "onerilen", yon: -1 } };
+const arkaUc = window.arkaUc;
+const durum = { veri: null, konular: [], konu: null, sekme: "videolar", gorunum: "tablo", sira: { alan: "onerilen", yon: -1 } };
 
 // Sıralama alanları: [etiket, değer okuyucu, varsayılan yön (-1 azalan, 1 artan)]
+const VIDEO_SIRALARI = {
+  onerilen: ["Önerilen sıra", null, -1],
+  kat: ["Kat", v => v.kat, -1],
+  izlenme: ["İzlenme", v => v.views, -1],
+  normal: ["Kanal normali", v => v.normal, -1],
+  yas: ["En yeni", v => v.published, -1],
+};
 const SIRALAR = {
-  videolar: {
-    onerilen: ["Önerilen sıra", null, -1],
-    kat: ["Kat", v => v.kat, -1],
-    izlenme: ["İzlenme", v => v.views, -1],
-    normal: ["Kanal normali", v => v.normal, -1],
-    yas: ["En yeni", v => v.published, -1],
-  },
+  videolar: VIDEO_SIRALARI,
+  konu: VIDEO_SIRALARI,
   yeni: {
     onerilen: ["Önerilen sıra", null, -1],
     izlenme: ["İzlenme", k => k.en_iyi.views, -1],
@@ -30,86 +34,65 @@ const SIRALAR = {
 function hafizaOku(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function hafizaYaz(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* yok say */ } }
 function hafizaSil(k) { try { localStorage.removeItem(k); } catch (e) { /* yok say */ } }
+function $(id) { return document.getElementById(id); }
+
+function el(etiket, ozellik, ...cocuklar) {
+  const e = document.createElement(etiket);
+  if (ozellik) for (const [k, v] of Object.entries(ozellik)) {
+    if (k === "class") e.className = v; else if (v != null) e.setAttribute(k, v);
+  }
+  for (const c of cocuklar) if (c != null) e.append(c instanceof Node ? c : String(c));
+  return e;
+}
+
+// Biçim ------------------------------------------------------------------
+
+function kisa(n) {
+  if (n == null) return "–";
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(".", ",") + "M";
+  if (n >= 1e3) return Math.round(n / 1e3) + "k";
+  return String(Math.round(n));
+}
+function katYaz(k) {
+  return (k >= 10 ? Math.round(k).toLocaleString("tr-TR") : k.toFixed(1).replace(".", ",")) + "x";
+}
+function referansZaman() {
+  return durum.sekme === "konu" && durum.konu ? durum.konu.tarih : durum.veri.guncellendi;
+}
+function yasGun(iso) { return (new Date(referansZaman()).getTime() - new Date(iso).getTime()) / 86400000; }
+function yasYaz(iso) {
+  const g = yasGun(iso);
+  return g < 1 ? Math.max(1, Math.round(g * 24)) + " saat" : Math.floor(g) + " gün";
+}
+function tur(v) { return v.is_short ? "Short" : "Uzun"; }
+function ytLink(id) { return "https://www.youtube.com/watch?v=" + encodeURIComponent(id); }
+function ac(id) { window.open(ytLink(id), "_blank", "noopener"); }
+function guvenliResim(u) { return u && /^https:\/\//.test(u) ? u : null; }
+
+// "Yeni": ilk kez son taramada görülen video. Artış: bir önceki taramadan bu yana kazandığı izlenme.
+function yeniMi(v) { return durum.sekme !== "konu" && !!v.ilk && v.ilk === durum.veri.guncellendi; }
+function artis(v) { return durum.sekme !== "konu" && v.onceki ? v.views - v.onceki[1] : null; }
+
+function rozetler(v) {
+  const a = artis(v);
+  const parcalar = [];
+  if (yeniMi(v)) parcalar.push(el("span", { class: "rozet" }, "Yeni"));
+  if (a > 0) parcalar.push(el("span", { class: "artis" }, "+" + kisa(a) + " son taramadan beri"));
+  if (v.yeniKanal) parcalar.push(el("span", { class: "rozet" }, "Yeni kanal"));
+  return parcalar.length ? el("span", { class: "rozetler" }, ...parcalar) : null;
+}
 
 // Kanal engelleme ---------------------------------------------------------
-// Engel listesi depodaki data/engel.txt dosyasıdır; tarayıcı bir sonraki taramada bu kanallara hiç bakmaz.
-// Site, kullanıcının kendi GitHub anahtarıyla bu dosyaya commit atar. Anahtar yalnızca bu tarayıcıda durur.
-const DEPO = "BaranIrmak08/youtube-radar";
-const ENGEL_YOLU = "data/engel.txt";
+// Engellenen kanal, liste bir sonraki taramada yenilenene kadar bu tarayıcıda gizli tutulur.
 
-function anahtar() { return hafizaOku("radar.anahtar") || ""; }
-
-// Engellenen kanallar, liste.json bir sonraki taramada yenilenene kadar bu tarayıcıda gizli tutulur.
 function gizlilerOku() { try { return JSON.parse(hafizaOku("radar.gizli") || "{}"); } catch (e) { return {}; } }
 const gizliler = gizlilerOku();
 function gizlileriYaz() { hafizaYaz("radar.gizli", JSON.stringify(gizliler)); }
 
-async function github(yol, ayar) {
-  const r = await fetch("https://api.github.com/repos/" + DEPO + yol, {
-    ...ayar,
-    headers: { Authorization: "Bearer " + anahtar(), Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28", ...(ayar && ayar.body ? { "Content-Type": "application/json" } : {}) },
-  });
-  if (!r.ok) {
-    const e = new Error(r.status === 401 ? "anahtar geçersiz ya da süresi dolmuş"
-      : r.status === 403 || r.status === 404 ? "anahtarın bu depoya yazma izni yok"
-      : "GitHub hatası " + r.status);
-    e.durum = r.status;
-    throw e;
-  }
-  return r.json();
-}
-
-function b64Coz(s) { return new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, "")), c => c.charCodeAt(0))); }
-function b64Yap(s) { let b = ""; for (const x of new TextEncoder().encode(s)) b += String.fromCharCode(x); return btoa(b); }
-
-async function engelDosyasiOku() {
-  const d = await github("/contents/" + ENGEL_YOLU + "?ref=main");
-  return { metin: b64Coz(d.content), sha: d.sha };
-}
-
-// Dosyayı okur, değiştirir, yazar; bu arada başkası yazdıysa (409) bir kez yeniden dener.
-async function engelDosyasiDegistir(degistir, mesaj) {
-  for (let deneme = 0; ; deneme++) {
-    const { metin, sha } = await engelDosyasiOku();
-    const yeni = degistir(metin);
-    if (yeni === metin) return;
-    try {
-      await github("/contents/" + ENGEL_YOLU, { method: "PUT",
-        body: JSON.stringify({ message: mesaj, content: b64Yap(yeni), sha, branch: "main" }) });
-      return;
-    } catch (e) {
-      if (e.durum !== 409 || deneme > 0) throw e;
-    }
-  }
-}
-
-function engelSatirlari(metin) {
-  return metin.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith("#"))
-    .map(s => { const [id, ...ad] = s.split(" #"); return { id: id.trim(), ad: ad.join(" #").trim() || id.trim() }; });
-}
-
-let kuyruk = Promise.resolve();  // engelle / geri al istekleri sırayla gitsin
-function sirayaKoy(is) { kuyruk = kuyruk.then(is, is); return kuyruk; }
-
-function engelEkle(id, ad) {
-  const temizAd = (ad || "").replace(/[\r\n#]+/g, " ").trim();
-  return sirayaKoy(() => engelDosyasiDegistir(metin => {
-    if (engelSatirlari(metin).some(s => s.id === id)) return metin;
-    return metin.replace(/\s*$/, "\n") + id + " # " + temizAd + "\n";
-  }, "engel: " + temizAd));
-}
-
-function engelKaldir(id, ad) {
-  return sirayaKoy(() => engelDosyasiDegistir(metin =>
-    metin.split(/\r?\n/).filter(s => s.split(" #")[0].trim() !== id).join("\n"),
-    "engel kaldırıldı: " + (ad || id)));
-}
-
 let bildirimZamani = null;
 function bildir(metin, geriAl) {
-  const kutu = document.getElementById("bildirim"), geri = document.getElementById("bildirim-geri");
-  document.getElementById("bildirim-metin").textContent = metin;
+  const kutu = $("bildirim"), geri = $("bildirim-geri");
+  $("bildirim-metin").textContent = metin;
   geri.hidden = !geriAl;
   geri.onclick = geriAl ? () => { kutu.hidden = true; geriAl(); } : null;
   kutu.hidden = false;
@@ -121,18 +104,17 @@ function kanaliEngelle(id, ad) {
   gizliler[id] = ad;
   gizlileriYaz();
   ciz();
-  const hata = e => { delete gizliler[id]; gizlileriYaz(); ciz(); bildir("Engellenemedi: " + e.message); };
-  engelEkle(id, ad).catch(hata);
+  arkaUc.engelEkle(id, ad).catch(e => { delete gizliler[id]; gizlileriYaz(); ciz(); bildir("Engellenemedi: " + e.message); });
   bildir(ad + " engellendi.", () => {
     delete gizliler[id];
     gizlileriYaz();
     ciz();
-    engelKaldir(id, ad).catch(e => bildir("Geri alınamadı: " + e.message));
+    arkaUc.engelKaldir(id, ad).catch(e => bildir("Geri alınamadı: " + e.message));
   });
 }
 
 function engelDugmesi(id, ad) {
-  if (!anahtar()) return null;
+  if (!arkaUc.hazir()) return null;
   const b = el("button", { type: "button", class: "engel-btn", title: "Kanalı engelle", "aria-label": "Kanalı engelle: " + ad });
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
@@ -147,51 +129,19 @@ function engelDugmesi(id, ad) {
   return b;
 }
 
-function el(etiket, ozellik, ...cocuklar) {
-  const e = document.createElement(etiket);
-  if (ozellik) for (const [k, v] of Object.entries(ozellik)) {
-    if (k === "class") e.className = v; else if (v != null) e.setAttribute(k, v);
-  }
-  for (const c of cocuklar) if (c != null) e.append(c instanceof Node ? c : String(c));
-  return e;
-}
-
-function kisa(n) {
-  if (n == null) return "–";
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(".", ",") + "M";
-  if (n >= 1e3) return Math.round(n / 1e3) + "k";
-  return String(Math.round(n));
-}
-function katYaz(k) {
-  return (k >= 10 ? Math.round(k).toLocaleString("tr-TR") : k.toFixed(1).replace(".", ",")) + "x";
-}
-
-function yasGun(iso) {
-  const ref = new Date(durum.veri.guncellendi).getTime();
-  return (ref - new Date(iso).getTime()) / 86400000;
-}
-function yasYaz(iso) {
-  const g = yasGun(iso);
-  return g < 1 ? Math.max(1, Math.round(g * 24)) + " saat" : Math.floor(g) + " gün";
-}
-function tur(v) { return v.is_short ? "Short" : "Uzun"; }
-function ytLink(id) { return "https://www.youtube.com/watch?v=" + encodeURIComponent(id); }
-function ac(id) { window.open(ytLink(id), "_blank", "noopener"); }
-function guvenliResim(u) { return u && /^https:\/\//.test(u) ? u : null; }
+// Filtreler --------------------------------------------------------------
 
 function filtrele(v) {
-  const zaman = +document.getElementById("f-zaman").value;
-  const t = document.getElementById("f-tur").value;
-  const u = document.getElementById("f-ulke").value;
-  const k = document.getElementById("f-kategori").value;
   if (gizliler[v.channel_id] !== undefined) return false;
-  const ara = document.getElementById("f-ara").value.trim().toLocaleLowerCase("tr");
+  const ara = $("f-ara").value.trim().toLocaleLowerCase("tr");
   if (ara && !((v.title || "") + " " + (v.channel_title || "")).toLocaleLowerCase("tr").includes(ara)) return false;
-  if (yasGun(v.published) > zaman) return false;
+  if (yasGun(v.published) > +$("f-zaman").value) return false;
+  const t = $("f-tur").value, u = $("f-ulke").value, k = $("f-kategori").value;
   if (t === "short" && !v.is_short) return false;
   if (t === "uzun" && v.is_short) return false;
   if (u && (v.ulke || "").toUpperCase() !== u) return false;
   if (k && v.category_id !== k) return false;
+  if ($("f-yeni").value === "yeni" && durum.sekme !== "konu" && !yeniMi(v)) return false;
   return true;
 }
 
@@ -200,9 +150,8 @@ function secenekDoldur() {
   const ulkeler = [...new Set(hepsi.map(v => (v.ulke || "").toUpperCase()).filter(Boolean))].sort();
   const kategoriler = [...new Set(hepsi.map(v => v.category_id).filter(Boolean))]
     .sort((a, b) => (KATEGORI[a] || a).localeCompare(KATEGORI[b] || b, "tr"));
-  const su = document.getElementById("f-ulke"), sk = document.getElementById("f-kategori");
-  for (const u of ulkeler) su.append(el("option", { value: u }, u));
-  for (const k of kategoriler) sk.append(el("option", { value: k }, KATEGORI[k] || ("Kategori " + k)));
+  for (const u of ulkeler) $("f-ulke").append(el("option", { value: u }, u));
+  for (const k of kategoriler) $("f-kategori").append(el("option", { value: k }, KATEGORI[k] || ("Kategori " + k)));
 }
 
 // Hücreler ---------------------------------------------------------------
@@ -214,10 +163,14 @@ function videoHucre(v, kanalAdi) {
   return el("td", { class: "hucre-video" }, el("div", { class: "video" },
     resim ? el("img", { class: "video__resim", src: resim, alt: "", loading: "lazy", width: "96", height: "54" })
           : el("div", { class: "video__resim" }),
-    el("div", { class: "video__metin" }, baslik, el("span", { class: "video__kanal" }, kanalAdi))));
+    el("div", { class: "video__metin" }, baslik, el("span", { class: "video__kanal" }, kanalAdi), rozetler(v))));
 }
 
 function okuma(v) {
+  if (v.kat == null) {  // konu aramasında yeni kanal: normali yok, izlenme gösterilir
+    return el("div", { class: "okuma" },
+      el("span", { class: "okuma__kat" }, kisa(v.views)), el("span", { class: "okuma__toplam" }, "izlenme"));
+  }
   return el("div", { class: "okuma" },
     el("span", { class: "okuma__kat" }, katYaz(v.kat)),
     el("span", { class: "okuma__toplam" }, kisa(v.views) + " / " + kisa(v.normal)));
@@ -235,7 +188,7 @@ function baslikHucre([b, s, alan]) {
   const btn = el("button", { type: "button", class: "sirala" }, b);
   btn.addEventListener("click", () => {
     durum.sira = secili ? { alan, yon: -durum.sira.yon } : { alan, yon: SIRALAR[durum.sekme][alan][2] };
-    document.getElementById("f-sira").value = alan;
+    $("f-sira").value = alan;
     ciz();
   });
   th.append(btn);
@@ -243,10 +196,8 @@ function baslikHucre([b, s, alan]) {
 }
 
 function tablo(basliklar, tbody) {
-  if (anahtar()) basliklar = [...basliklar, [el("span", { class: "visually-hidden" }, "İşlem"), "islem"]];
-  return el("table", null,
-    el("thead", null, el("tr", null, ...basliklar.map(baslikHucre))),
-    tbody);
+  if (arkaUc.hazir()) basliklar = [...basliklar, [el("span", { class: "visually-hidden" }, "İşlem"), "islem"]];
+  return el("table", null, el("thead", null, el("tr", null, ...basliklar.map(baslikHucre))), tbody);
 }
 
 function islemHucre(id, ad) {
@@ -280,8 +231,7 @@ function yeniTablo(liste) {
     const v = k.en_iyi;
     const tr = el("tr", null,
       el("td", { class: "hucre-okuma" }, el("div", { class: "okuma" },
-        el("span", { class: "okuma__kat" }, kisa(v.views)),
-        el("span", { class: "okuma__toplam" }, "izlenme"))),
+        el("span", { class: "okuma__kat" }, kisa(v.views)), el("span", { class: "okuma__toplam" }, "izlenme"))),
       videoHucre(v, k.channel_title),
       hucre("Kanal yaşı", k.kanal_yasi_gun == null ? "–" : Math.floor(k.kanal_yasi_gun) + " gün", "olcum sag"),
       hucre("Video", k.video_sayisi ?? "–", "olcum sag"),
@@ -307,7 +257,7 @@ function kart(v, ust, ciftler, kanalId, kanalAdi) {
   const resim = guvenliResim(v.thumb);
   a.append(resim ? el("img", { class: "kart__resim", src: resim, alt: "", loading: "lazy", width: "320", height: "180" })
                  : el("div", { class: "kart__resim" }));
-  a.append(el("div", { class: "kart__govde" }, ust, el("span", { class: "kart__baslik" }, v.title), bilgi(ciftler)));
+  a.append(el("div", { class: "kart__govde" }, ust, el("span", { class: "kart__baslik" }, v.title), rozetler(v), bilgi(ciftler)));
   return el("article", { class: "kart" }, a, engelDugmesi(kanalId, kanalAdi));
 }
 
@@ -340,7 +290,7 @@ function csvTarih(iso) { return iso ? iso.replace("T", " ").replace("Z", "") : "
 function kategoriAdi(id) { return id ? (KATEGORI[id] || id) : ""; }
 
 function csvSatirlar(liste) {
-  if (durum.sekme === "videolar") {
+  if (durum.sekme !== "yeni") {
     return [["Kat", "Başlık", "Kanal", "İzlenme", "Kanal normali", "Yayın (UTC)", "Tür", "Dil", "Kategori", "Link"],
       ...liste.map(v => [csvSayi(v.kat, 2), v.title, v.channel_title, csvSayi(v.views), csvSayi(v.normal),
         csvTarih(v.published), tur(v), v.ulke, kategoriAdi(v.category_id), ytLink(v.id)])];
@@ -353,25 +303,133 @@ function csvSatirlar(liste) {
     })];
 }
 
+function csvAdi() {
+  const tarih = referansZaman().slice(0, 10);
+  if (durum.sekme === "konu") {
+    const parca = durum.konu.konu.toLocaleLowerCase("tr").replace(/[^a-z0-9çğıöşü]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    return "youtube-radar-konu-" + (parca || "arama") + "-" + tarih + ".csv";
+  }
+  return "youtube-radar-" + (durum.sekme === "videolar" ? "videolar" : "yeni-kanallar") + "-" + tarih + ".csv";
+}
+
 function csvIndir() {
   const liste = guncelListe();
   if (!liste.length) return;
   const metin = "﻿" + csvSatirlar(liste).map(r => r.map(csvHucre).join(";")).join("\r\n") + "\r\n";
-  const tarih = (durum.veri.guncellendi || new Date().toISOString()).slice(0, 10);
-  const ad = "youtube-radar-" + (durum.sekme === "videolar" ? "videolar" : "yeni-kanallar") + "-" + tarih + ".csv";
   const url = URL.createObjectURL(new Blob([metin], { type: "text/csv;charset=utf-8" }));
-  const a = el("a", { href: url, download: ad });
+  const a = el("a", { href: url, download: csvAdi() });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Konu araması -----------------------------------------------------------
+// İstek arkaUc.konuIste ile gider; sonuç birkaç dakika sonra konular/<id>.json olarak yayınlanır.
+
+const BEKLEME_SINIRI_DK = 12;
+let izleyici = null;
+
+function konuSatirlari() {
+  if (!durum.konu) return [];
+  return [...durum.konu.videolar,
+    ...durum.konu.yeni_kanallar.map(k => ({ ...k.en_iyi, channel_title: k.channel_title, kat: null, normal: null, yeniKanal: true }))];
+}
+
+async function konulariYukle() {
+  try {
+    const r = await fetch("konular/index.json?t=" + Date.now(), { cache: "no-store" });
+    durum.konular = r.ok ? await r.json() : [];
+  } catch (e) { durum.konular = []; }
+  const s = $("konu-gecmis");
+  s.replaceChildren(...(durum.konular.length
+    ? durum.konular.map(k => el("option", { value: k.id },
+        k.konu + " (" + new Date(k.tarih).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) + ")"))
+    : [el("option", { value: "" }, "Henüz arama yok")]));
+  s.disabled = !durum.konular.length;
+  if (durum.konu) s.value = durum.konu.id;
+}
+
+async function konuSec(id) {
+  if (!id) { durum.konu = null; ciz(); return; }
+  try {
+    const r = await fetch("konular/" + encodeURIComponent(id) + ".json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error();
+    durum.konu = await r.json();
+    $("konu-gecmis").value = id;
+    konuDurumu(durum.konu.hata || "", !!durum.konu.hata);
+  } catch (e) {
+    durum.konu = null;
+    konuDurumu("Bu arama yüklenemedi.", true);
+  }
+  ciz();
+}
+
+function konuDurumu(metin, kotu) {
+  $("konu-durum").textContent = metin;
+  $("konu-durum").classList.toggle("kotu", !!kotu);
+}
+
+function konuPaneliniHazirla() {
+  const hazir = arkaUc.hazir();
+  $("konu-metin").disabled = !hazir;
+  $("konu-ara").disabled = !hazir || !!izleyici;
+  $("konu-anahtar-notu").hidden = hazir;
+}
+
+async function konuAra() {
+  const konu = $("konu-metin").value.trim();
+  if (!konu) { konuDurumu("Önce bir konu yaz.", true); $("konu-metin").focus(); return; }
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  $("konu-ara").disabled = true;
+  konuDurumu("İstek gönderiliyor…");
+  try {
+    await arkaUc.konuIste(id, konu);
+  } catch (e) {
+    konuDurumu("Gönderilemedi: " + e.message + ".", true);
+    $("konu-ara").disabled = false;
+    return;
+  }
+  hafizaYaz("radar.bekleyen", JSON.stringify({ id, konu, zaman: Date.now() }));
+  bekleyeniIzle();
+}
+
+function bekleyeniIzle() {
+  let bekleyen;
+  try { bekleyen = JSON.parse(hafizaOku("radar.bekleyen") || "null"); } catch (e) { bekleyen = null; }
+  if (!bekleyen) return;
+  const kontrol = async () => {
+    const dk = (Date.now() - bekleyen.zaman) / 60000;
+    if (dk > BEKLEME_SINIRI_DK) {
+      clearInterval(izleyici); izleyici = null;
+      hafizaSil("radar.bekleyen");
+      konuPaneliniHazirla();
+      konuDurumu("“" + bekleyen.konu + "” için sonuç gelmedi. İş kaydına bak: " + arkaUc.isKaydi(), true);
+      return;
+    }
+    konuDurumu("“" + bekleyen.konu + "” aranıyor, " + Math.max(1, Math.round(dk)) + ". dakika. Sonuç genelde 2-4 dakikada gelir.");
+    await konulariYukle();
+    if (durum.konular.some(k => k.id === bekleyen.id)) {
+      clearInterval(izleyici); izleyici = null;
+      hafizaSil("radar.bekleyen");
+      konuPaneliniHazirla();
+      $("konu-metin").value = "";
+      await konuSec(bekleyen.id);
+      if (!durum.konu || !durum.konu.hata) konuDurumu("“" + bekleyen.konu + "” araması hazır.");
+      bildir("“" + bekleyen.konu + "” araması hazır.");
+    }
+  };
+  clearInterval(izleyici);
+  izleyici = setInterval(kontrol, 15000);
+  konuPaneliniHazirla();
+  kontrol();
+}
+
 // Çizim ------------------------------------------------------------------
 
 function guncelListe() {
-  const liste = durum.sekme === "videolar"
-    ? durum.veri.videolar.filter(filtrele)
+  const liste = durum.sekme === "videolar" ? durum.veri.videolar.filter(filtrele)
+    : durum.sekme === "konu" ? konuSatirlari().filter(filtrele)
     : durum.veri.yeni_kanallar.filter(k => filtrele(k.en_iyi));
   const tanim = SIRALAR[durum.sekme][durum.sira.alan];
   if (!tanim || !tanim[1]) return liste;  // önerilen sıra: taramanın verdiği sıra
@@ -385,24 +443,35 @@ function guncelListe() {
 }
 
 function siraSecenekleri() {
-  const s = document.getElementById("f-sira");
-  s.replaceChildren(...Object.entries(SIRALAR[durum.sekme]).map(([alan, [ad]]) => el("option", { value: alan }, ad)));
-  s.value = durum.sira.alan;
+  $("f-sira").replaceChildren(...Object.entries(SIRALAR[durum.sekme]).map(([alan, [ad]]) => el("option", { value: alan }, ad)));
+  $("f-sira").value = durum.sira.alan;
 }
 
+const FILTRE_KUTULARI = ["f-tur", "f-ulke", "f-kategori", "f-ara", "f-yeni"];
+
 function filtreleriSifirla() {
-  document.getElementById("f-zaman").value = "7";
-  for (const id of ["f-tur", "f-ulke", "f-kategori", "f-ara"]) document.getElementById(id).value = "";
+  $("f-zaman").value = "7";
+  for (const id of FILTRE_KUTULARI) $(id).value = "";
   ciz();
 }
 
 function bosDurum() {
-  const dar = document.getElementById("f-zaman").value !== "7" ||
-    ["f-tur", "f-ulke", "f-kategori", "f-ara"].some(id => document.getElementById(id).value.trim());
+  if (durum.sekme === "konu" && !durum.konu) {
+    return el("div", { class: "bos" },
+      el("p", { class: "bos__ana" }, durum.konular.length ? "Bir arama seç." : "Henüz konu araması yok."),
+      el("p", null, arkaUc.hazir() ? "Yukarıdaki kutuya bir konu yazıp Ara’ya bas. Örnek: ai animation, ai shorts"
+                                  : "Arama için Ayarlar’dan GitHub anahtarını gir."));
+  }
+  if (durum.sekme === "konu" && durum.konu.hata) {
+    return el("div", { class: "bos" }, el("p", { class: "bos__ana" }, "Bu arama yapılamadı."), el("p", null, durum.konu.hata));
+  }
+  const dar = $("f-zaman").value !== "7" || FILTRE_KUTULARI.some(id => $(id).value.trim());
+  const ad = { videolar: "patlayan video", yeni: "yeni kanal", konu: "bu konuda patlayan video" }[durum.sekme];
   const kutu = el("div", { class: "bos" },
-    el("p", { class: "bos__ana" }, durum.sekme === "videolar" ? "Bu filtrelerle patlayan video yok." : "Bu filtrelerle yeni kanal yok."),
+    el("p", { class: "bos__ana" }, "Bu filtrelerle " + ad + " yok."),
     el("p", null, dar ? "Filtreler listeyi daraltıyor. Son 7 güne ve tüm türlere bakabilirsin."
-                      : "Bu taramada uygun video çıkmadı. Bir sonraki tarama listeyi yeniler."));
+      : durum.sekme === "konu" ? "Bu konuda kanalının normalinin 3 katını geçen video çıkmadı. Farklı ifadeler dene."
+      : "Bu taramada uygun video çıkmadı. Bir sonraki tarama listeyi yeniler."));
   if (dar) {
     const b = el("button", { type: "button", class: "btn" }, "Filtreleri sıfırla");
     b.addEventListener("click", filtreleriSifirla);
@@ -420,27 +489,27 @@ function ciz() {
     b.classList.toggle("aktif", b.dataset.gorunum === durum.gorunum);
     b.setAttribute("aria-pressed", String(b.dataset.gorunum === durum.gorunum));
   }
-  const kutu = document.getElementById("icerik");
+  $("konu-panel").hidden = durum.sekme !== "konu";
+  $("f-yeni").disabled = durum.sekme === "konu";
+  const kutu = $("icerik");
   kutu.replaceChildren();
   const liste = guncelListe();
-  const cizici = durum.sekme === "videolar"
-    ? (durum.gorunum === "tablo" ? videoTablo : videoKartlar)
-    : (durum.gorunum === "tablo" ? yeniTablo : yeniKartlar);
-  document.getElementById("sayac").textContent = liste.length.toLocaleString("tr-TR") + " sonuç";
-  const csv = document.getElementById("csv-indir");
-  csv.disabled = !liste.length;
-  csv.title = liste.length ? "Ekrandaki listeyi indir" : "İndirilecek sonuç yok";
+  const cizici = durum.sekme === "yeni"
+    ? (durum.gorunum === "tablo" ? yeniTablo : yeniKartlar)
+    : (durum.gorunum === "tablo" ? videoTablo : videoKartlar);
+  $("sayac").textContent = liste.length.toLocaleString("tr-TR") + " sonuç";
+  $("csv-indir").disabled = !liste.length;
+  $("csv-indir").title = liste.length ? "Ekrandaki listeyi indir" : "İndirilecek sonuç yok";
   kutu.append(liste.length ? cizici(liste) : bosDurum());
 }
 
 function durumYaz(veri) {
   const t = new Date(veri.guncellendi);
-  const p = document.getElementById("durum");
-  p.replaceChildren(
+  $("durum").replaceChildren(
     el("span", null, "Son tarama ", el("span", { class: "olcum" },
       t.toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" }))),
     el("span", null, el("span", { class: "olcum" }, (veri.harcanan ?? 0).toLocaleString("tr-TR")), " birim kota"));
-  if (veri.kota_bitti) p.append(el("span", { class: "kotu" }, "Kota bitti, tarama eksik"));
+  if (veri.kota_bitti) $("durum").append(el("span", { class: "kotu" }, "Kota bitti, tarama eksik"));
 }
 
 async function yukle() {
@@ -455,34 +524,37 @@ async function yukle() {
     ornek = true;
   }
   durum.veri = veri;
-  document.getElementById("ornek-uyari").hidden = !ornek;
+  $("ornek-uyari").hidden = !ornek;
   durumYaz(veri);
   secenekDoldur();
   siraSecenekleri();
+  await konulariYukle();
+  if (durum.konular.length) await konuSec(durum.konular[0].id);
+  konuPaneliniHazirla();
   ciz();
+  bekleyeniIzle();
 }
 
 // Ayarlar ----------------------------------------------------------------
 
 function ayarDurumu(metin, kotu) {
-  const p = document.getElementById("anahtar-durum");
-  p.textContent = metin;
-  p.classList.toggle("kotu", !!kotu);
+  $("anahtar-durum").textContent = metin;
+  $("anahtar-durum").classList.toggle("kotu", !!kotu);
 }
 
 async function engelListesiCiz() {
-  const ul = document.getElementById("engel-listesi");
-  if (!anahtar()) { ul.replaceChildren(el("li", { class: "soluk" }, "Liste anahtar girilince görünür.")); return; }
+  const ul = $("engel-listesi");
+  if (!arkaUc.hazir()) { ul.replaceChildren(el("li", { class: "soluk" }, "Liste anahtar girilince görünür.")); return; }
   ul.replaceChildren(el("li", { class: "soluk" }, "Yükleniyor…"));
   try {
-    const satirlar = engelSatirlari((await engelDosyasiOku()).metin);
+    const satirlar = await arkaUc.engelListesi();
     if (!satirlar.length) { ul.replaceChildren(el("li", { class: "soluk" }, "Henüz engellenen kanal yok.")); return; }
     ul.replaceChildren(...satirlar.map(s => {
       const b = el("button", { type: "button", class: "btn btn--kucuk" }, "Engeli kaldır");
       b.addEventListener("click", async () => {
         b.disabled = true;
         try {
-          await engelKaldir(s.id, s.ad);
+          await arkaUc.engelKaldir(s.id, s.ad);
           delete gizliler[s.id];
           gizlileriYaz();
           if (durum.veri) ciz();
@@ -496,69 +568,77 @@ async function engelListesiCiz() {
   }
 }
 
+function anahtarDegisti() {
+  konuPaneliniHazirla();
+  if (durum.veri) ciz();
+  engelListesiCiz();
+}
+
 function ayarlariAc() {
-  const kayitli = !!anahtar();
-  const g = document.getElementById("anahtar");
-  g.value = "";
-  g.placeholder = kayitli ? "Kayıtlı anahtar var, değiştirmek için yenisini yapıştır" : "github_pat_…";
-  document.getElementById("anahtar-sil").disabled = !kayitli;
-  ayarDurumu(kayitli ? "Anahtar kayıtlı. Engelle düğmeleri açık." : "");
-  document.getElementById("ayarlar").showModal();
+  const kayitli = arkaUc.hazir();
+  $("anahtar").value = "";
+  $("anahtar").placeholder = kayitli ? "Kayıtlı anahtar var, değiştirmek için yenisini yapıştır" : "github_pat_…";
+  $("anahtar-sil").disabled = !kayitli;
+  ayarDurumu(kayitli ? "Anahtar kayıtlı. Engelleme ve konu araması açık." : "");
+  $("ayarlar").showModal();
   engelListesiCiz();
 }
 
 async function anahtarKaydet() {
-  const deger = document.getElementById("anahtar").value.trim();
+  const deger = $("anahtar").value.trim();
   if (!deger) { ayarDurumu("Önce anahtarı yapıştır.", true); return; }
-  const eski = anahtar();
+  const eski = hafizaOku("radar.anahtar");
   hafizaYaz("radar.anahtar", deger);
   ayarDurumu("Deneniyor…");
   try {
-    await engelDosyasiOku();
-    document.getElementById("anahtar").value = "";
-    document.getElementById("anahtar-sil").disabled = false;
-    ayarDurumu("Anahtar çalışıyor. Engelle düğmeleri açıldı.");
-    if (durum.veri) ciz();
-    engelListesiCiz();
+    await arkaUc.dene();
+    $("anahtar").value = "";
+    $("anahtar-sil").disabled = false;
+    ayarDurumu("Anahtar çalışıyor. Engelleme ve konu araması açıldı.");
+    anahtarDegisti();
   } catch (e) {
     if (eski) hafizaYaz("radar.anahtar", eski); else hafizaSil("radar.anahtar");
     ayarDurumu("Olmadı: " + e.message + ".", true);
   }
 }
 
-document.getElementById("ayarlar-ac").addEventListener("click", ayarlariAc);
-document.getElementById("anahtar-kaydet").addEventListener("click", anahtarKaydet);
-document.getElementById("anahtar-sil").addEventListener("click", () => {
+// Olaylar ----------------------------------------------------------------
+
+$("ayarlar-ac").addEventListener("click", ayarlariAc);
+$("anahtar-kaydet").addEventListener("click", anahtarKaydet);
+$("anahtar-sil").addEventListener("click", () => {
   hafizaSil("radar.anahtar");
-  document.getElementById("anahtar-sil").disabled = true;
+  $("anahtar-sil").disabled = true;
   ayarDurumu("Anahtar bu tarayıcıdan silindi.");
-  if (durum.veri) ciz();
-  engelListesiCiz();
+  anahtarDegisti();
 });
+$("konu-form").addEventListener("submit", e => { e.preventDefault(); konuAra(); });
+$("konu-gecmis").addEventListener("change", e => konuSec(e.target.value));
 
 durum.gorunum = hafizaOku("radar.gorunum") === "kart" ? "kart" : "tablo";
 for (const b of document.querySelectorAll("[data-sekme]")) b.addEventListener("click", () => {
   if (durum.sekme !== b.dataset.sekme) {
     durum.sekme = b.dataset.sekme;
     durum.sira = { alan: "onerilen", yon: -1 };
+    if (durum.sekme === "konu") $("f-zaman").value = "7";  // konu araması son 7 günü kapsar
     siraSecenekleri();
   }
-  ciz();
+  if (durum.veri) ciz();
 });
 // Sıralama seçimi durumu günceller; çizimi aşağıdaki ortak filtre dinleyicisi yapar.
-document.getElementById("f-sira").addEventListener("change", e => {
+$("f-sira").addEventListener("change", e => {
   const alan = e.target.value;
   durum.sira = { alan, yon: SIRALAR[durum.sekme][alan][2] };
 });
-document.getElementById("f-ara").addEventListener("input", () => durum.veri && ciz());
+$("f-ara").addEventListener("input", () => durum.veri && ciz());
 for (const b of document.querySelectorAll("[data-gorunum]")) b.addEventListener("click", () => {
-  durum.gorunum = b.dataset.gorunum; hafizaYaz("radar.gorunum", durum.gorunum); ciz();
+  durum.gorunum = b.dataset.gorunum; hafizaYaz("radar.gorunum", durum.gorunum); if (durum.veri) ciz();
 });
 for (const s of document.querySelectorAll(".filtreler select")) s.addEventListener("change", () => durum.veri && ciz());
-document.getElementById("csv-indir").addEventListener("click", () => durum.veri && csvIndir());
+$("csv-indir").addEventListener("click", () => durum.veri && csvIndir());
 yukle().catch(() => {
-  document.getElementById("durum").textContent = "Veri yüklenemedi.";
-  document.getElementById("icerik").replaceChildren(el("div", { class: "bos" },
+  $("durum").textContent = "Veri yüklenemedi.";
+  $("icerik").replaceChildren(el("div", { class: "bos" },
     el("p", { class: "bos__ana" }, "Liste yüklenemedi."),
     el("p", null, "Bağlantını kontrol edip sayfayı yenile. Sorun sürerse liste dosyası henüz yayınlanmamış olabilir.")));
 });

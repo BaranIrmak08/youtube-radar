@@ -13,6 +13,7 @@ class FakeYT:
         self.cagri = 0
         self.harcanan = 0
         self.istenen_kanallar = []
+        self.aranan = []
 
     def _say(self, m):
         self.cagri += 1
@@ -20,8 +21,11 @@ class FakeYT:
             raise KotaBitti("sahte kota")
         self.harcanan += m
 
-    def ara(self, region, kategori, after_iso):
+    def ara(self, region, kategori, after_iso, q=None):
         self._say(100)
+        if q is not None:
+            self.aranan.append((region, q))
+            return list(self.search.get((region, q), []))
         return list(self.search.get(region, []))
 
     def trend(self, region):

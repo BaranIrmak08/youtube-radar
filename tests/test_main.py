@@ -244,6 +244,25 @@ class MainTest(unittest.TestCase):
         liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
         self.assertNotIn("bhajan", self._hepsi(liste))
 
+    def test_yeni_ve_artis_bilgisi(self):
+        liste = self.calis()
+        hit = liste["videolar"][0]
+        self.assertEqual(hit["ilk"], liste["guncellendi"])      # ilk kez bu taramada görüldü
+        self.assertIsNone(hit["onceki"])
+        d = dunya()
+        d["videos"]["hit"]["views"] = 500_000
+        later = NOW + timedelta(hours=20)
+        liste2 = calistir(FakeYT(**d), self.veri, self.site, later)
+        hit2 = next(v for v in liste2["videolar"] if v["id"] == "hit")
+        self.assertEqual(hit2["ilk"], iso(NOW))
+        self.assertEqual(hit2["onceki"], [iso(NOW), 350_000])
+
+    def test_tarama_kota_defterine_yazilir(self):
+        yt = FakeYT(**dunya())
+        calistir(yt, self.veri, self.site, NOW)
+        from radar import kota
+        self.assertEqual(kota.bugun(self.veri / "kota.json", NOW), {"toplam": yt.harcanan, "tarama": True})
+
     def test_sadece_liste_api_kullanmaz(self):
         self.calis()
         liste = radar_main.sadece_liste(self.veri, self.site, NOW)

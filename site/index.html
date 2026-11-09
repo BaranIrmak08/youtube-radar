@@ -29,6 +29,7 @@
     <div class="sekmeler" role="tablist">
       <button type="button" role="tab" data-sekme="videolar" class="aktif">Patlayan videolar</button>
       <button type="button" role="tab" data-sekme="yeni">Yeni kanallar</button>
+      <button type="button" role="tab" data-sekme="konu">Konu ara</button>
     </div>
     <div class="arac__sag">
       <div class="gorunum" role="group" aria-label="Görünüm">
@@ -38,6 +39,22 @@
       <button type="button" id="csv-indir" class="btn btn--birincil" disabled>CSV indir</button>
     </div>
   </nav>
+
+  <section id="konu-panel" class="konu" aria-label="Konu araması" hidden>
+    <form id="konu-form" class="konu__form">
+      <label class="alan konu__alan">Konu
+        <input type="text" id="konu-metin" name="konu" maxlength="200" autocomplete="off"
+               placeholder="ör. ai animation, ai shorts, yapay zeka animasyon">
+      </label>
+      <button type="submit" id="konu-ara" class="btn btn--birincil">Ara</button>
+    </form>
+    <p class="konu__not">Virgülle en çok 3 ifade. Son 7 günde, kanalının normalinin en az 3 katı izlenen videolar gelir. Bir arama 300 ile 800 birim kota harcar, sonuç 2 ile 4 dakikada gelir.</p>
+    <p id="konu-anahtar-notu" class="konu__not" hidden>Arama için Ayarlar’dan GitHub anahtarını gir.</p>
+    <p id="konu-durum" class="ayarlar__durum" role="status"></p>
+    <label class="alan konu__gecmis">Geçmiş aramalar
+      <select id="konu-gecmis"><option value="">Henüz arama yok</option></select>
+    </label>
+  </section>
 
   <section class="filtreler" aria-label="Filtreler">
     <label class="ara">Ara
@@ -62,6 +79,12 @@
     </label>
     <label>Kategori
       <select id="f-kategori"><option value="">Hepsi</option></select>
+    </label>
+    <label>Durum
+      <select id="f-yeni">
+        <option value="">Hepsi</option>
+        <option value="yeni">Yalnızca yeniler</option>
+      </select>
     </label>
     <label>Sırala
       <select id="f-sira"><option value="onerilen">Önerilen sıra</option></select>
@@ -101,6 +124,7 @@
   <button type="button" id="bildirim-geri" class="btn" hidden>Geri al</button>
 </div>
 
+<script src="arkauc.js?v=__SURUM__"></script>
 <script src="app.js?v=__SURUM__"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from radar import kota
 from radar.api import KotaBitti, YouTube
 from radar.plan import gunun_aramalari, gunun_ulkeleri
 from radar.score import normal, skorla, yas_gun, yeni_kanal_mi
@@ -119,6 +120,19 @@ def kurum_kanallari(videolar: dict, kanallar: dict, engel: set[str],
     return out
 
 
+def kurumlari_isle(videolar: dict, kanallar: dict, engel: set[str], izin: set[str]) -> dict[str, str]:
+    """Kurum kanallarını bulur ve kanal kaydına işler (izin listesine alınanların işaretini kaldırır)."""
+    kurumlar = kurum_kanallari(videolar, kanallar, engel, izin)
+    for cid, ch in kanallar.items():
+        if ch.get("kurum") and cid not in kurumlar:
+            ch.pop("kurum")
+    for cid, neden in kurumlar.items():
+        if not kanallar.get(cid, {}).get("kurum"):
+            ad = next((v.get("channel_title") for v in videolar.values() if v["channel_id"] == cid), "")
+            kanallar.setdefault(cid, {"id": cid, "title": ad})["kurum"] = neden
+    return kurumlar
+
+
 def _yasak_ulke(ch: dict | None) -> bool:
     return (ch or {}).get("country") in YASAK_ULKELER
 
@@ -168,7 +182,10 @@ def _normaller(yt, videolar: dict, kanallar: dict, now: datetime) -> None:
 
 
 def _satir(v: dict, ch: dict) -> dict:
+    gecmis = v.get("gecmis") or []
     return {
+        "ilk": gecmis[0][0] if gecmis else None,          # ilk görüldüğü tarama ("Yeni" etiketi)
+        "onceki": gecmis[-2] if len(gecmis) > 1 else None,  # bir önceki taramadaki [zaman, izlenme]
         "id": v["id"], "title": v["title"], "channel_id": v["channel_id"],
         "channel_title": v.get("channel_title") or ch.get("title", ""),
         "views": v["views"], "published": v["published"], "is_short": v["is_short"],
@@ -178,7 +195,7 @@ def _satir(v: dict, ch: dict) -> dict:
 
 
 def liste_kur(videolar: dict, kanallar: dict, now: datetime, engel: set[str] = frozenset(),
-              izin: set[str] = frozenset()) -> tuple[list, list]:
+              izin: set[str] = frozenset(), kat_min: float = KAT_MIN) -> tuple[list, list]:
     satirlar, yeniler = [], {}
     kurumlar = kurum_kanallari(videolar, kanallar, engel, izin)
     for v in videolar.values():
@@ -202,7 +219,7 @@ def liste_kur(videolar: dict, kanallar: dict, now: datetime, engel: set[str] = f
                 }
             continue
         s = skorla(v, n, now)
-        if s["kat"] < KAT_MIN:
+        if s["kat"] < kat_min:
             continue
         satirlar.append({**satir, "normal": n, "kat": round(s["kat"], 2), "duzeltilmis": round(s["duzeltilmis"], 2)})
     satirlar.sort(key=lambda r: -r["duzeltilmis"])
@@ -235,14 +252,7 @@ def calistir(yt, veri_dir: Path, site_dir: Path, now: datetime) -> dict:
         kayit["gecmis"] = gecmis + [[_iso(now), v["views"]]]
         videolar[i] = kayit
     engel, izin = engel_yukle(veri_dir / "engel.txt"), engel_yukle(veri_dir / "izin.txt")
-    kurumlar = kurum_kanallari(videolar, kanallar, engel, izin)
-    for cid, ch in kanallar.items():
-        if ch.get("kurum") and cid not in kurumlar:
-            ch.pop("kurum")  # izin listesine alınmış
-    for cid, neden in kurumlar.items():
-        if not kanallar.get(cid, {}).get("kurum"):
-            ad = next((v.get("channel_title") for v in videolar.values() if v["channel_id"] == cid), "")
-            kanallar.setdefault(cid, {"id": cid, "title": ad})["kurum"] = neden
+    kurumlar = kurumlari_isle(videolar, kanallar, engel, izin)
     videolar = {i: v for i, v in videolar.items()
                 if yas_gun(v["published"], now) <= LISTE_GUN and on_eleme(v)
                 and v["channel_id"] not in kurumlar
@@ -260,6 +270,7 @@ def calistir(yt, veri_dir: Path, site_dir: Path, now: datetime) -> dict:
     kaydet(veri_dir / "videolar.json", videolar)
     kaydet(veri_dir / "kanallar.json", kanallar)
     kaydet(site_dir / "liste.json", liste)
+    kota.ekle(veri_dir / "kota.json", now, yt.harcanan, tarama=True)
     return liste
 
 
@@ -290,7 +301,9 @@ def main() -> int:
     if not key:
         print("Hata: YT_API_KEY ortam değişkeni ayarlı değil.", file=sys.stderr)
         return 1
-    liste = calistir(YouTube(key), kok / "data", kok / "site", datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    yt = YouTube(key, butce=kota.tarama_butcesi(kok / "data" / "kota.json", now))
+    liste = calistir(yt, kok / "data", kok / "site", now)
     print(f"Tarama bitti: {len(liste['videolar'])} video, {len(liste['yeni_kanallar'])} yeni kanal, "
           f"{liste['harcanan']} birim kota" + (" (kota bitti)" if liste["kota_bitti"] else ""))
     return 0
