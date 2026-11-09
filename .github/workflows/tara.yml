@@ -55,6 +55,10 @@ jobs:
             git push
           fi
 
+      # Tarayıcılar eski app.js / style.css'i önbellekten kullanmasın: her yayına kendi sürüm etiketi.
+      - name: Önbellek sürümü
+        run: sed -i "s/__SURUM__/${GITHUB_SHA::8}/g" site/index.html site/style.css
+
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5

@@ -3,8 +3,8 @@
  * axes: dark/grotesk-sans/chromatic-amber · posture: restrained · contrast: pass · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4 · weakest: P, a list tool has little to argue; the kat is shown as its own sum so a reader can check every number */
 /* Hallmark · waive 49b · video titles in the table are real YouTube titles that cannot shorten, clamped to two lines at most · the table row is the radar's record of each video */
-@import url("./tokens.css");
-@import url("./base.css");
+@import url("./tokens.css?v=__SURUM__");
+@import url("./base.css?v=__SURUM__");
 
 :root {
   --kap: 1240px;
