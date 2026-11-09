@@ -23,8 +23,18 @@ KAT_MIN = 5
 DILLER = {"tr", "en"}
 INGILIZCE_ULKELER = {"US", "GB", "CA", "AU", "IE", "NZ"}
 REKLAM_BEGENI_ORANI = 0.001  # beğeni/izlenme bunun altındaysa muhtemel reklam
+# Kurum (haber, dizi, film, spor kulübü, TV) kanalları: yalnızca bağımsız üreticiler kalsın.
+KURUM_KATEGORILER = {"25"}  # Haber ve Politika
+KURUM_BASLIK = re.compile(
+    r"(?i)(\bbölüm\b|\bfragman|\btanıtım\b|\bepisode\b|\bep\.?\s*\d+|\btrailer\b|\bteaser\b|\bfull movie\b"
+    r"|maç özeti|\bhighlights?\b|\beng sub\b|\bfull game\b)")
+KURUM_KANAL = re.compile(
+    r"(?i)(\btv\b|\bnews\b|\bhaber|\bsports?\b|\bspor\b|\bnetwork\b|\bpictures\b|\bfilms?\b|\brecords\b"
+    r"|official|\bmedia\b|\bmedya\b|\bfm\b|\bradio\b|\bgeo\b|\bspotv\b|\bhighlights?\b|\bmovies?\b"
+    r"|\bfc\b|\bleague\b|\bclips?\b|\bcinema\b|\bkino)")
+YASAK_ULKELER = {"IN", "PK", "BD"}  # videolarını sık sık yanlışlıkla İngilizce işaretliyorlar
 # Arap (Urduca dahil) ve Hint alfabeleri (Devanagari, Bengal, Gurmukhi, Tamil, Telugu vb.)
-YABANCI_YAZI = re.compile(r"[؀-ۿݐ-ݿࢠ-ࣿऀ-෿]")
+YABANCI_YAZI = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0900-\u0DFF]")
 
 
 def _iso(dt: datetime) -> str:
@@ -59,6 +69,54 @@ def on_eleme(v: dict) -> bool:
     return d is None or d in DILLER
 
 
+def kurum_nedeni(v: dict) -> str | None:
+    """Videonun kendisinden anlaşılan kurum işareti (kanal bilgisi gerekmez)."""
+    if v.get("category_id") in KURUM_KATEGORILER:
+        return "haber kategorisi"
+    if KURUM_BASLIK.search(v.get("title") or ""):
+        return "başlık"
+    if KURUM_KANAL.search(v.get("channel_title") or ""):
+        return "kanal adı"
+    return None
+
+
+def engel_yukle(yol: Path) -> set[str]:
+    """data/engel.txt ve data/izin.txt: her satırda bir kanal ID'si ya da kanal adı; # ile başlayanlar açıklama."""
+    try:
+        satirlar = Path(yol).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    return {s.strip().casefold() for s in satirlar if s.strip() and not s.strip().startswith("#")}
+
+
+def kurum_kanallari(videolar: dict, kanallar: dict, engel: set[str],
+                    izin: set[str] = frozenset()) -> dict[str, str]:
+    """Elenecek kanallar: kanal kaydında işaretli, bir videosu kurum işareti taşıyan ya da engel listesinde.
+    İzin listesindeki kanallar (yanlış alarm) hiçbir durumda elenmez."""
+    out = {cid: ch["kurum"] for cid, ch in kanallar.items() if ch.get("kurum")}
+    for cid, ch in kanallar.items():
+        if cid.casefold() in engel or (ch.get("title") or "").strip().casefold() in engel:
+            out.setdefault(cid, "engel listesi")
+    for v in videolar.values():
+        cid = v["channel_id"]
+        if cid in out:
+            continue
+        neden = kurum_nedeni(v)
+        if neden is None and (cid.casefold() in engel or (v.get("channel_title") or "").strip().casefold() in engel):
+            neden = "engel listesi"
+        if neden:
+            out[cid] = neden
+    if izin:
+        adlar = {cid: (ch.get("title") or "").strip().casefold() for cid, ch in kanallar.items()}
+        adlar.update({v["channel_id"]: (v.get("channel_title") or "").strip().casefold() for v in videolar.values()})
+        out = {cid: n for cid, n in out.items() if cid.casefold() not in izin and adlar.get(cid) not in izin}
+    return out
+
+
+def _yasak_ulke(ch: dict | None) -> bool:
+    return (ch or {}).get("country") in YASAK_ULKELER
+
+
 def _kesif(yt, kanallar: dict, now: datetime, bulunan: dict, taze: dict) -> None:
     gun_no = now.toordinal()
     for r in gunun_ulkeleri(gun_no):
@@ -69,7 +127,9 @@ def _kesif(yt, kanallar: dict, now: datetime, bulunan: dict, taze: dict) -> None
     for r, k in gunun_aramalari(gun_no):
         for i in yt.ara(r, k, after):
             bulunan.setdefault(i, r)
-    sirali = sorted(kanallar.values(), key=lambda c: c.get("kontrol") or "")
+    sirali = sorted((c for c in kanallar.values()
+                     if c.get("uploads") and not c.get("kurum") and not _yasak_ulke(c)),
+                    key=lambda c: c.get("kontrol") or "")
     for ch in sirali[:HAVUZ_GUNLUK]:
         if ch.get("uploads"):
             for i in yt.son_yuklemeler(ch["uploads"], HAVUZ_SON):
@@ -92,7 +152,7 @@ def _normaller(yt, videolar: dict, kanallar: dict, now: datetime) -> None:
         kayit = {**eski, **ch}
         kayit.setdefault("kontrol", _iso(now))
         kanallar[ch["id"]] = kayit
-        if ch.get("uploads"):
+        if ch.get("uploads") and not _yasak_ulke(ch):
             once = _iso(now - timedelta(days=NORMAL_MIN_YAS_GUN))
             ids = yt.son_yuklemeler(ch["uploads"], 20, once=once, sayfa=NORMAL_SAYFA)
             gorulen = {v["id"]: v["views"] for v in yt.videolar(ids)}
@@ -111,11 +171,15 @@ def _satir(v: dict, ch: dict) -> dict:
     }
 
 
-def liste_kur(videolar: dict, kanallar: dict, now: datetime) -> tuple[list, list]:
+def liste_kur(videolar: dict, kanallar: dict, now: datetime, engel: set[str] = frozenset(),
+              izin: set[str] = frozenset()) -> tuple[list, list]:
     satirlar, yeniler = [], {}
+    kurumlar = kurum_kanallari(videolar, kanallar, engel, izin)
     for v in videolar.values():
         ch = kanallar.get(v["channel_id"])
         if v["views"] < ALT_SINIR or ch is None or not on_eleme(v):
+            continue
+        if v["channel_id"] in kurumlar or _yasak_ulke(ch):
             continue
         if dil(v, ch) not in DILLER or (ch.get("title") or "").endswith(" - Topic"):
             continue
@@ -164,8 +228,19 @@ def calistir(yt, veri_dir: Path, site_dir: Path, now: datetime) -> dict:
         kayit["bulundu"] = bulundu
         kayit["gecmis"] = gecmis + [[_iso(now), v["views"]]]
         videolar[i] = kayit
+    engel, izin = engel_yukle(veri_dir / "engel.txt"), engel_yukle(veri_dir / "izin.txt")
+    kurumlar = kurum_kanallari(videolar, kanallar, engel, izin)
+    for cid, ch in kanallar.items():
+        if ch.get("kurum") and cid not in kurumlar:
+            ch.pop("kurum")  # izin listesine alınmış
+    for cid, neden in kurumlar.items():
+        if not kanallar.get(cid, {}).get("kurum"):
+            ad = next((v.get("channel_title") for v in videolar.values() if v["channel_id"] == cid), "")
+            kanallar.setdefault(cid, {"id": cid, "title": ad})["kurum"] = neden
     videolar = {i: v for i, v in videolar.items()
-                if yas_gun(v["published"], now) <= LISTE_GUN and on_eleme(v)}
+                if yas_gun(v["published"], now) <= LISTE_GUN and on_eleme(v)
+                and v["channel_id"] not in kurumlar
+                and not _yasak_ulke(kanallar.get(v["channel_id"]))}
 
     if not kota_bitti:
         try:
@@ -173,7 +248,7 @@ def calistir(yt, veri_dir: Path, site_dir: Path, now: datetime) -> dict:
         except KotaBitti:
             kota_bitti = True
 
-    satirlar, yeni = liste_kur(videolar, kanallar, now)
+    satirlar, yeni = liste_kur(videolar, kanallar, now, engel, izin)
     liste = {"guncellendi": _iso(now), "harcanan": yt.harcanan, "kota_bitti": kota_bitti,
              "videolar": satirlar, "yeni_kanallar": yeni}
     kaydet(veri_dir / "videolar.json", videolar)
@@ -188,7 +263,8 @@ def sadece_liste(veri_dir: Path, site_dir: Path, now: datetime) -> dict:
     videolar = yukle(veri_dir / "videolar.json")
     kanallar = yukle(veri_dir / "kanallar.json")
     eski = yukle(site_dir / "liste.json")
-    satirlar, yeni = liste_kur(videolar, kanallar, now)
+    satirlar, yeni = liste_kur(videolar, kanallar, now, engel_yukle(veri_dir / "engel.txt"),
+                               engel_yukle(veri_dir / "izin.txt"))
     liste = {"guncellendi": eski.get("guncellendi") or _iso(now), "harcanan": eski.get("harcanan", 0),
              "kota_bitti": eski.get("kota_bitti", False), "videolar": satirlar, "yeni_kanallar": yeni}
     kaydet(site_dir / "liste.json", liste)

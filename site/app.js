@@ -7,7 +7,25 @@ const KATEGORI = {
   "25": "Haber ve Politika", "26": "Nasıl Yapılır", "27": "Eğitim", "28": "Bilim ve Teknoloji",
 };
 
-const durum = { veri: null, sekme: "videolar", gorunum: "tablo" };
+const durum = { veri: null, sekme: "videolar", gorunum: "tablo", sira: { alan: "onerilen", yon: -1 } };
+
+// Sıralama alanları: [etiket, değer okuyucu, varsayılan yön (-1 azalan, 1 artan)]
+const SIRALAR = {
+  videolar: {
+    onerilen: ["Önerilen sıra", null, -1],
+    kat: ["Kat", v => v.kat, -1],
+    izlenme: ["İzlenme", v => v.views, -1],
+    normal: ["Kanal normali", v => v.normal, -1],
+    yas: ["En yeni", v => v.published, -1],
+  },
+  yeni: {
+    onerilen: ["Önerilen sıra", null, -1],
+    izlenme: ["İzlenme", k => k.en_iyi.views, -1],
+    kanal_yasi: ["Kanal yaşı (gençten)", k => k.kanal_yasi_gun, 1],
+    video: ["Video sayısı", k => k.video_sayisi, -1],
+    yas: ["En yeni", k => k.en_iyi.published, -1],
+  },
+};
 
 function hafizaOku(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function hafizaYaz(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* yok say */ } }
@@ -49,6 +67,8 @@ function filtrele(v) {
   const t = document.getElementById("f-tur").value;
   const u = document.getElementById("f-ulke").value;
   const k = document.getElementById("f-kategori").value;
+  const ara = document.getElementById("f-ara").value.trim().toLocaleLowerCase("tr");
+  if (ara && !((v.title || "") + " " + (v.channel_title || "")).toLocaleLowerCase("tr").includes(ara)) return false;
   if (yasGun(v.published) > zaman) return false;
   if (t === "short" && !v.is_short) return false;
   if (t === "uzun" && v.is_short) return false;
@@ -89,9 +109,24 @@ function hucre(etiket, icerik, sinif) {
   return el("td", { class: sinif || null, "data-etiket": etiket }, icerik);
 }
 
+function baslikHucre([b, s, alan]) {
+  if (!alan) return el("th", { class: s || null, scope: "col" }, b);
+  const secili = durum.sira.alan === alan;
+  const th = el("th", { class: s || null, scope: "col",
+    "aria-sort": secili ? (durum.sira.yon < 0 ? "descending" : "ascending") : null });
+  const btn = el("button", { type: "button", class: "sirala" }, b);
+  btn.addEventListener("click", () => {
+    durum.sira = secili ? { alan, yon: -durum.sira.yon } : { alan, yon: SIRALAR[durum.sekme][alan][2] };
+    document.getElementById("f-sira").value = alan;
+    ciz();
+  });
+  th.append(btn);
+  return th;
+}
+
 function tablo(basliklar, tbody) {
   return el("table", null,
-    el("thead", null, el("tr", null, ...basliklar.map(([b, s]) => el("th", { class: s || null, scope: "col" }, b)))),
+    el("thead", null, el("tr", null, ...basliklar.map(baslikHucre))),
     tbody);
 }
 
@@ -110,7 +145,8 @@ function videoTablo(liste) {
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
-  return tablo([["Kat"], ["Video"], ["İzlenme", "sag"], ["Normali", "sag"], ["Yaş"], ["Tür"]], tbody);
+  return tablo([["Kat", null, "kat"], ["Video"], ["İzlenme", "sag", "izlenme"], ["Normali", "sag", "normal"],
+    ["Yaş", null, "yas"], ["Tür"]], tbody);
 }
 
 function yeniTablo(liste) {
@@ -129,7 +165,8 @@ function yeniTablo(liste) {
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
-  return tablo([["İzlenme"], ["En iyi video"], ["Kanal yaşı", "sag"], ["Video", "sag"], ["Yaş"], ["Tür"]], tbody);
+  return tablo([["İzlenme", null, "izlenme"], ["En iyi video"], ["Kanal yaşı", "sag", "kanal_yasi"],
+    ["Video", "sag", "video"], ["Yaş", null, "yas"], ["Tür"]], tbody);
 }
 
 // Kartlar ----------------------------------------------------------------
@@ -207,20 +244,35 @@ function csvIndir() {
 // Çizim ------------------------------------------------------------------
 
 function guncelListe() {
-  return durum.sekme === "videolar"
+  const liste = durum.sekme === "videolar"
     ? durum.veri.videolar.filter(filtrele)
     : durum.veri.yeni_kanallar.filter(k => filtrele(k.en_iyi));
+  const tanim = SIRALAR[durum.sekme][durum.sira.alan];
+  if (!tanim || !tanim[1]) return liste;  // önerilen sıra: taramanın verdiği sıra
+  const oku = tanim[1], yon = durum.sira.yon;
+  return liste.slice().sort((a, b) => {
+    const x = oku(a), y = oku(b);
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * yon;
+  });
+}
+
+function siraSecenekleri() {
+  const s = document.getElementById("f-sira");
+  s.replaceChildren(...Object.entries(SIRALAR[durum.sekme]).map(([alan, [ad]]) => el("option", { value: alan }, ad)));
+  s.value = durum.sira.alan;
 }
 
 function filtreleriSifirla() {
   document.getElementById("f-zaman").value = "7";
-  for (const id of ["f-tur", "f-ulke", "f-kategori"]) document.getElementById(id).value = "";
+  for (const id of ["f-tur", "f-ulke", "f-kategori", "f-ara"]) document.getElementById(id).value = "";
   ciz();
 }
 
 function bosDurum() {
   const dar = document.getElementById("f-zaman").value !== "7" ||
-    ["f-tur", "f-ulke", "f-kategori"].some(id => document.getElementById(id).value);
+    ["f-tur", "f-ulke", "f-kategori", "f-ara"].some(id => document.getElementById(id).value.trim());
   const kutu = el("div", { class: "bos" },
     el("p", { class: "bos__ana" }, durum.sekme === "videolar" ? "Bu filtrelerle patlayan video yok." : "Bu filtrelerle yeni kanal yok."),
     el("p", null, dar ? "Filtreler listeyi daraltıyor. Son 7 güne ve tüm türlere bakabilirsin."
@@ -280,11 +332,25 @@ async function yukle() {
   document.getElementById("ornek-uyari").hidden = !ornek;
   durumYaz(veri);
   secenekDoldur();
+  siraSecenekleri();
   ciz();
 }
 
 durum.gorunum = hafizaOku("radar.gorunum") === "kart" ? "kart" : "tablo";
-for (const b of document.querySelectorAll("[data-sekme]")) b.addEventListener("click", () => { durum.sekme = b.dataset.sekme; ciz(); });
+for (const b of document.querySelectorAll("[data-sekme]")) b.addEventListener("click", () => {
+  if (durum.sekme !== b.dataset.sekme) {
+    durum.sekme = b.dataset.sekme;
+    durum.sira = { alan: "onerilen", yon: -1 };
+    siraSecenekleri();
+  }
+  ciz();
+});
+// Sıralama seçimi durumu günceller; çizimi aşağıdaki ortak filtre dinleyicisi yapar.
+document.getElementById("f-sira").addEventListener("change", e => {
+  const alan = e.target.value;
+  durum.sira = { alan, yon: SIRALAR[durum.sekme][alan][2] };
+});
+document.getElementById("f-ara").addEventListener("input", () => durum.veri && ciz());
 for (const b of document.querySelectorAll("[data-gorunum]")) b.addEventListener("click", () => {
   durum.gorunum = b.dataset.gorunum; hafizaYaz("radar.gorunum", durum.gorunum); ciz();
 });

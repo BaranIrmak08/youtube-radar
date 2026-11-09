@@ -1,0 +1,2 @@
+# Yanlışlıkla kurum sayılan bağımsız kanallar. Her satıra bir kanal adı ya da kanal ID'si (UC...).
+# Buradaki kanallar hiçbir kurum kuralına takılmaz.

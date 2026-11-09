@@ -1,0 +1,5 @@
+# Kurallardan sızan kurum kanalları. Her satıra bir kanal adı ya da kanal ID'si (UC...).
+# Büyük/küçük harf fark etmez. # ile başlayan satırlar açıklamadır.
+Saturday Night Live
+The Dodo
+The Daily Show

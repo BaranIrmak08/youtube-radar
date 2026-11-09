@@ -14,7 +14,10 @@
 <header class="ust-bar">
   <div class="kap ust-bar__ic">
     <h1>YouTube Radar</h1>
-    <p id="durum" class="durum">Yükleniyor…</p>
+    <div class="ust-bar__sag">
+      <p id="durum" class="durum">Yükleniyor…</p>
+      <a class="imza" href="https://github.com/BaranIrmak08" target="_blank" rel="noopener">Made by BaranIrmak08</a>
+    </div>
   </div>
 </header>
 
@@ -36,6 +39,9 @@
   </nav>
 
   <section class="filtreler" aria-label="Filtreler">
+    <label class="ara">Ara
+      <input type="search" id="f-ara" name="ara" placeholder="Başlık ya da kanal adı" autocomplete="off" spellcheck="false">
+    </label>
     <label>Zaman
       <select id="f-zaman">
         <option value="1">Son 24 saat</option>
@@ -55,6 +61,9 @@
     </label>
     <label>Kategori
       <select id="f-kategori"><option value="">Hepsi</option></select>
+    </label>
+    <label>Sırala
+      <select id="f-sira"><option value="onerilen">Önerilen sıra</option></select>
     </label>
   </section>
 

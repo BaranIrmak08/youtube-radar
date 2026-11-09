@@ -19,6 +19,10 @@
 .durum { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-md); font-family: var(--font-outlier); font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums slashed-zero; }
 .durum .olcum { color: var(--color-cool); }
 .durum .kotu { color: var(--color-bad); }
+.ust-bar__sag { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-lg); }
+.imza { font-size: var(--text-xs); color: var(--color-muted); text-decoration: underline; text-decoration-color: var(--color-rule-2); transition: color var(--dur-micro) var(--ease-out), text-decoration-color var(--dur-micro) var(--ease-out); }
+.imza:active { color: var(--color-ink); }
+@media (hover: hover) { .imza:hover { color: var(--color-accent); text-decoration-color: var(--color-accent); } }
 .uyari { margin-top: var(--space-md); padding: var(--space-xs) var(--space-sm); border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-ink); font-size: var(--text-sm); }
 
 /* Araç çubuğu */
@@ -49,12 +53,18 @@
 }
 
 /* Filtreler */
-.filtreler { display: grid; grid-template-columns: repeat(4, minmax(0, 12rem)); gap: var(--space-sm); margin-top: var(--space-md); }
+.filtreler { display: grid; grid-template-columns: minmax(0, 16rem) repeat(5, minmax(0, 10rem)); gap: var(--space-sm); margin-top: var(--space-md); }
 .filtreler label { display: flex; flex-direction: column; gap: var(--space-2xs); font-size: var(--text-xs); font-weight: 500; color: var(--color-muted); }
 .filtreler select { min-height: 36px; padding: 0 var(--space-xs); border: var(--rule-hair) solid var(--color-muted); border-radius: var(--radius-pill); background: var(--color-paper-3); color: var(--color-ink); font-size: var(--text-sm); cursor: pointer; transition: border-color var(--dur-micro) var(--ease-out); }
 .filtreler select:focus-visible { outline-offset: -2px; }
 .filtreler select:active { border-color: var(--color-ink-2); }
 .filtreler select:disabled { opacity: 0.55; cursor: not-allowed; }
+.filtreler input { min-height: 36px; padding: 0 var(--space-xs); border: var(--rule-hair) solid var(--color-muted); border-radius: var(--radius-pill); background: var(--color-paper-3); color: var(--color-ink); font-size: var(--text-sm); transition: border-color var(--dur-micro) var(--ease-out); }
+.filtreler input::placeholder { color: var(--color-muted); }
+.filtreler input:focus-visible { outline-offset: -2px; }
+.filtreler input:disabled { opacity: 0.55; cursor: not-allowed; }
+@media (hover: hover) { .filtreler input:hover { border-color: var(--color-ink-2); } }
+@media (max-width: 60rem) { .filtreler { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (hover: hover) { .filtreler select:hover { border-color: var(--color-ink-2); } }
 
 /* Liste */
@@ -68,6 +78,14 @@ td.olcum { white-space: nowrap; }
 .okuma__toplam { font-family: var(--font-outlier); font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums slashed-zero; white-space: nowrap; }
 
 table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th .sirala { display: inline-flex; align-items: center; gap: var(--space-2xs); min-height: 32px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; transition: color var(--dur-micro) var(--ease-out); }
+th .sirala::after { content: ""; width: 0; height: 0; border-inline: 4px solid transparent; border-top: 5px solid transparent; }
+th[aria-sort] .sirala { color: var(--color-ink); }
+th[aria-sort="descending"] .sirala::after { border-top-color: var(--color-cool); }
+th[aria-sort="ascending"] .sirala::after { border-top: 0; border-bottom: 5px solid var(--color-cool); }
+th .sirala:active { color: var(--color-ink-2); }
+@media (hover: hover) { th .sirala:hover { color: var(--color-ink); } }
+th.sag .sirala { flex-direction: row-reverse; }
 th { padding: var(--space-xs) var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule-2); text-align: left; font-size: var(--text-xs); font-weight: 500; color: var(--color-muted); white-space: nowrap; }
 th.sag, td.sag { text-align: right; }
 td { padding: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); vertical-align: middle; color: var(--color-ink-2); }
@@ -114,7 +132,8 @@ tbody tr:active { background: var(--color-paper-3); }
   .arac__sag { width: 100%; justify-content: space-between; }
   .gorunum button, .btn { min-height: 44px; }
   .filtreler { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filtreler select { min-height: 44px; font-size: var(--text-md); }
+  .filtreler .ara { grid-column: 1 / -1; }
+  .filtreler select, .filtreler input { min-height: 44px; font-size: var(--text-md); }
   table, tbody { display: block; }
   thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   tbody tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-xs) var(--space-sm); padding: var(--space-md) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
