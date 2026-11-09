@@ -73,8 +73,21 @@ class YouTube:
             out += [channel_from_api(c) for c in d.get("items", [])]
         return out
 
-    def son_yuklemeler(self, uploads_id: str, adet: int = 20) -> list[str]:
-        d = self._get("playlistItems", {"part": "contentDetails", "playlistId": uploads_id,
-                                        "maxResults": adet}, 1) or {}
-        return [i["contentDetails"]["videoId"] for i in d.get("items", [])
-                if i.get("contentDetails", {}).get("videoId")]
+    def son_yuklemeler(self, uploads_id: str, adet: int = 20, once: str | None = None,
+                       sayfa: int = 1) -> list[str]:
+        """Kanalın en yeni yüklemeleri. once verilirse yalnızca o andan önce yayınlananlar,
+        gerekirse en çok `sayfa` sayfa (sayfa başı 50, 1 birim) geriye gidilir."""
+        ids, token = [], None
+        for _ in range(max(1, sayfa)):
+            p = {"part": "contentDetails", "playlistId": uploads_id, "maxResults": 50 if once else adet}
+            if token:
+                p["pageToken"] = token
+            d = self._get("playlistItems", p, 1) or {}
+            for i in d.get("items", []):
+                cd = i.get("contentDetails", {})
+                if cd.get("videoId") and (once is None or (cd.get("videoPublishedAt") or "") < once):
+                    ids.append(cd["videoId"])
+            token = d.get("nextPageToken")
+            if len(ids) >= adet or not token:
+                break
+        return ids[:adet]

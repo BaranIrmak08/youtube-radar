@@ -92,6 +92,21 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(YouTube("K", opener=op).son_yuklemeler("UU1", 20), ["x", "y"])
         self.assertIn("maxResults=20", op.urller[0])
 
+    def test_son_yuklemeler_tarih_sinirli_sayfali(self):
+        def oge(i, t):
+            return {"contentDetails": {"videoId": i, "videoPublishedAt": t}}
+        op = SahteOpener(
+            {"items": [oge("a", "2026-11-08T10:00:00Z"), oge("b", "2026-11-01T10:00:00Z")], "nextPageToken": "P2"},
+            {"items": [oge("c", "2026-10-30T10:00:00Z"), oge("d", "2026-10-29T10:00:00Z")], "nextPageToken": "P3"},
+        )
+        yt = YouTube("K", opener=op)
+        ids = yt.son_yuklemeler("UU1", 2, once="2026-11-05T00:00:00Z", sayfa=3)
+        self.assertEqual(ids, ["b", "c"])
+        self.assertEqual(len(op.urller), 2)
+        self.assertIn("maxResults=50", op.urller[0])
+        self.assertIn("pageToken=P2", op.urller[1])
+        self.assertEqual(yt.harcanan, 2)
+
     def test_anahtar_hata_mesajinda_yok(self):
         op = SahteOpener(http_hata(403, b'{"error":{"errors":[{"reason":"quotaExceeded"}]}}'))
         try:

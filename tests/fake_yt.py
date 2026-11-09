@@ -39,6 +39,16 @@ class FakeYT:
         self.istenen_kanallar += ids
         return [dict(self.channels[i]) for i in ids if i in self.channels]
 
-    def son_yuklemeler(self, uploads_id, adet=20):
-        self._say(1)
-        return list(self.uploads.get(uploads_id, []))[:adet]
+    def son_yuklemeler(self, uploads_id, adet=20, once=None, sayfa=1):
+        tum = list(self.uploads.get(uploads_id, []))
+        if once is None:
+            self._say(1)
+            return tum[:adet]
+        ids = []
+        for n in range(max(1, sayfa)):
+            parca = tum[n * 50:(n + 1) * 50]
+            self._say(1)
+            ids += [i for i in parca if self.videos.get(i, {}).get("published", "") < once]
+            if len(ids) >= adet or (n + 1) * 50 >= len(tum):
+                break
+        return ids[:adet]

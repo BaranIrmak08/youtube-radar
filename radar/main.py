@@ -1,5 +1,6 @@
 """Günlük tarama: keşif, havuz takibi, kanal normalleri, liste üretimi."""
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,10 +16,15 @@ ALT_SINIR = 5_000
 HAVUZ_GUNLUK = 300
 HAVUZ_SON = 5
 NORMAL_TAZE_GUN = 3
+NORMAL_MIN_YAS_GUN = 3  # normal hesabına bundan genç yüklemeler girmez (henüz izlenmediler)
+NORMAL_SAYFA = 3        # çok yükleyen kanallarda en çok 3 × 50 yükleme geriye gidilir
+NORMAL_SURUM = 2        # normal hesabı değişince eski kayıtlar yeniden çekilsin
 KAT_MIN = 5
 DILLER = {"tr", "en"}
 INGILIZCE_ULKELER = {"US", "GB", "CA", "AU", "IE", "NZ"}
 REKLAM_BEGENI_ORANI = 0.001  # beğeni/izlenme bunun altındaysa muhtemel reklam
+# Arap (Urduca dahil) ve Hint alfabeleri (Devanagari, Bengal, Gurmukhi, Tamil, Telugu vb.)
+YABANCI_YAZI = re.compile(r"[؀-ۿݐ-ݿࢠ-ࣿऀ-෿]")
 
 
 def _iso(dt: datetime) -> str:
@@ -43,6 +49,8 @@ def on_eleme(v: dict) -> bool:
     if v.get("is_live"):
         return False
     if (v.get("channel_title") or "").endswith(" - Topic"):
+        return False
+    if YABANCI_YAZI.search(v.get("title") or ""):
         return False
     likes = v.get("likes")
     if likes is not None and v["views"] >= ALT_SINIR and likes / v["views"] < REKLAM_BEGENI_ORANI:
@@ -76,7 +84,8 @@ def _normaller(yt, videolar: dict, kanallar: dict, now: datetime) -> None:
         if v["views"] < ALT_SINIR:
             continue
         ch = kanallar.get(v["channel_id"])
-        if (ch is None or (ch.get("normal_tarih") or "") < sinir) and v["channel_id"] not in gerek:
+        bayat = ch is None or (ch.get("normal_tarih") or "") < sinir or ch.get("normal_surum") != NORMAL_SURUM
+        if bayat and v["channel_id"] not in gerek:
             gerek.append(v["channel_id"])
     for ch in yt.kanallar(gerek):
         eski = kanallar.get(ch["id"], {})
@@ -84,10 +93,12 @@ def _normaller(yt, videolar: dict, kanallar: dict, now: datetime) -> None:
         kayit.setdefault("kontrol", _iso(now))
         kanallar[ch["id"]] = kayit
         if ch.get("uploads"):
-            ids = yt.son_yuklemeler(ch["uploads"], 20)
+            once = _iso(now - timedelta(days=NORMAL_MIN_YAS_GUN))
+            ids = yt.son_yuklemeler(ch["uploads"], 20, once=once, sayfa=NORMAL_SAYFA)
             gorulen = {v["id"]: v["views"] for v in yt.videolar(ids)}
             kayit["normal_views"] = {i: gorulen[i] for i in ids if i in gorulen}
         kayit["normal_tarih"] = _iso(now)
+        kayit["normal_surum"] = NORMAL_SURUM
 
 
 def _satir(v: dict, ch: dict) -> dict:

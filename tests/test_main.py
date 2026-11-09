@@ -105,6 +105,46 @@ class MainTest(unittest.TestCase):
         liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
         self.assertEqual(liste["videolar"], [])
 
+    def test_normal_taze_yuklemeleri_saymaz(self):
+        # Çok yükleyen haber kanalı: son 25 yükleme birkaç saatlik, az izlenmiş.
+        d = dunya()
+        d["channels"]["c_haber"] = {"id": "c_haber", "title": "Haber", "country": "GB",
+                                    "published": iso(NOW - timedelta(days=900)), "video_count": 5000,
+                                    "subs": 1_000_000, "uploads": "U_haber"}
+        d["videos"]["manset"] = vid("manset", "c_haber", 400_000, 0.5)
+        taze = [f"t{n}" for n in range(25)]
+        eski = [f"e{n}" for n in range(30)]
+        for i in taze:
+            d["videos"][i] = vid(i, "c_haber", 200, 0.2)
+        for i in eski:
+            d["videos"][i] = vid(i, "c_haber", 50_000, 4)
+        d["uploads"]["U_haber"] = ["manset"] + taze + eski
+        d["search"]["GB"] = ["manset"]
+        liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
+        satir = next(v for v in liste["videolar"] if v["id"] == "manset")
+        self.assertEqual(satir["normal"], 50_000)
+        self.assertEqual(satir["kat"], 8.0)
+
+    def test_eski_surum_normal_yenilenir(self):
+        # Önceki sürümle (taze videolar dahil) hesaplanmış, henüz bayatlamamış normal yeniden çekilir.
+        self.veri.mkdir(parents=True)
+        eski_kayit = {**dunya()["channels"]["c_eski"], "normal_tarih": iso(NOW),
+                      "normal_views": {f"x{n}": 100 for n in range(20)}}
+        (self.veri / "kanallar.json").write_text(json.dumps({"c_eski": eski_kayit}), encoding="utf-8")
+        liste = self.calis()
+        self.assertEqual(liste["videolar"][0]["normal"], 10_000)
+
+    def test_hint_arap_yazili_baslik_elenir(self):
+        d = dunya()
+        d["videos"]["mantra"] = vid("mantra", "c_eski", 400_000, 1, title="Kuber Mantra | कुबेर मंत्र")
+        d["videos"]["urdu"] = vid("urdu", "c_eski", 400_000, 1, title="Drama Ep 5 | ڈرامہ")
+        d["search"]["TR"] = d["search"]["TR"] + ["mantra", "urdu"]
+        liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
+        ids = [v["id"] for v in liste["videolar"]]
+        self.assertIn("hit", ids)
+        self.assertNotIn("mantra", ids)
+        self.assertNotIn("urdu", ids)
+
     def test_sadece_liste_api_kullanmaz(self):
         self.calis()
         liste = radar_main.sadece_liste(self.veri, self.site, NOW)
