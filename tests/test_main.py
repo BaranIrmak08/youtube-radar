@@ -211,6 +211,31 @@ class MainTest(unittest.TestCase):
         kanallar = json.loads((self.veri / "kanallar.json").read_text(encoding="utf-8"))
         self.assertNotIn("kurum", kanallar["c_vlog"])
 
+    def test_engel_id_ve_aciklama(self):
+        # Siteden eklenen satır biçimi: "UC... # Kanal adı"
+        d = dunya()
+        self._kanal(d, "UCabc123", "Rastgele Kanal")
+        d["videos"]["rv"] = vid("rv", "UCabc123", 400_000, 1, title="Bir video", channel_title="Rastgele Kanal")
+        d["search"]["US"] = d["search"]["US"] + ["rv"]
+        self.veri.mkdir(parents=True)
+        (self.veri / "engel.txt").write_text("UCabc123 # Rastgele Kanal" + chr(10), encoding="utf-8")
+        liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
+        self.assertNotIn("rv", self._hepsi(liste))
+        self.assertIn("hit", self._hepsi(liste))
+
+    def test_engel_kaldirilinca_kanal_geri_gelir(self):
+        d = dunya()
+        self._kanal(d, "UCgeri", "Geri Gelen")
+        d["videos"]["gv"] = vid("gv", "UCgeri", 400_000, 1, title="Bir video", channel_title="Geri Gelen")
+        d["search"]["US"] = d["search"]["US"] + ["gv"]
+        self.veri.mkdir(parents=True)
+        (self.veri / "engel.txt").write_text("UCgeri # Geri Gelen" + chr(10), encoding="utf-8")
+        liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
+        self.assertNotIn("gv", self._hepsi(liste))
+        (self.veri / "engel.txt").write_text("", encoding="utf-8")
+        liste = calistir(FakeYT(**d), self.veri, self.site, NOW)
+        self.assertIn("gv", self._hepsi(liste))
+
     def test_hint_kanali_ingilizce_isaretlese_de_elenir(self):
         d = dunya()
         self._kanal(d, "c_in", "Bhajan Songs", ulke="IN")

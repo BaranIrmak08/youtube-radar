@@ -86,14 +86,20 @@ def engel_yukle(yol: Path) -> set[str]:
         satirlar = Path(yol).read_text(encoding="utf-8").splitlines()
     except OSError:
         return set()
-    return {s.strip().casefold() for s in satirlar if s.strip() and not s.strip().startswith("#")}
+    out = set()
+    for s in satirlar:
+        s = s.split(" #")[0].strip()  # "UC... # Kanal adı" biçimindeki açıklamayı at
+        if s and not s.startswith("#"):
+            out.add(s.casefold())
+    return out
 
 
 def kurum_kanallari(videolar: dict, kanallar: dict, engel: set[str],
                     izin: set[str] = frozenset()) -> dict[str, str]:
     """Elenecek kanallar: kanal kaydında işaretli, bir videosu kurum işareti taşıyan ya da engel listesinde.
     İzin listesindeki kanallar (yanlış alarm) hiçbir durumda elenmez."""
-    out = {cid: ch["kurum"] for cid, ch in kanallar.items() if ch.get("kurum")}
+    # "engel listesi" işareti kalıcı değil: listeden çıkarılan kanal geri gelir.
+    out = {cid: ch["kurum"] for cid, ch in kanallar.items() if ch.get("kurum") and ch["kurum"] != "engel listesi"}
     for cid, ch in kanallar.items():
         if cid.casefold() in engel or (ch.get("title") or "").strip().casefold() in engel:
             out.setdefault(cid, "engel listesi")

@@ -44,6 +44,7 @@ jobs:
           git add data site/liste.json
           if ! git diff --cached --quiet; then
             git commit -m "veri: $(date -u +%Y-%m-%d)"
+            git pull --rebase  # tarama sürerken siteden engel eklenmiş olabilir
             git push
           fi
 

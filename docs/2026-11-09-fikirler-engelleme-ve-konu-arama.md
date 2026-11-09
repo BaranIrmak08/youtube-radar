@@ -1,6 +1,6 @@
 # Fikirler: kanal engelleme düğmesi ve konuya göre viral arama
 
-9 Kasım 2026. Henüz yapılmadı, yalnızca seçenekler. Seçim yapılınca plan çıkarılacak.
+9 Kasım 2026. **Kanal engelleme yapıldı (seçenek A), anahtar adımları için `kanal-engelleme-anahtari.md`. Konu arama henüz yapılmadı.**
 
 ## Temel sorun: site kendi başına bir şey kaydedemez
 

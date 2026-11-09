@@ -17,6 +17,7 @@
     <div class="ust-bar__sag">
       <p id="durum" class="durum">Yükleniyor…</p>
       <a class="imza" href="https://github.com/BaranIrmak08" target="_blank" rel="noopener">Made by BaranIrmak08</a>
+      <button type="button" id="ayarlar-ac" class="imza imza--btn">Ayarlar</button>
     </div>
   </div>
 </header>
@@ -73,6 +74,31 @@
       <div class="iskelet" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
     </div>
   </main>
+</div>
+
+<dialog id="ayarlar" class="ayarlar" aria-labelledby="ayarlar-baslik">
+  <form method="dialog" class="ayarlar__ic">
+    <h2 id="ayarlar-baslik">Ayarlar</h2>
+    <p class="ayarlar__not">Kanal engelleme için GitHub anahtarı gerekir. Anahtar yalnızca bu tarayıcıda saklanır, depoya yazılmaz. Anahtar yoksa engelle düğmeleri görünmez.</p>
+    <label class="alan">GitHub anahtarı
+      <input type="password" id="anahtar" name="anahtar" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+    </label>
+    <div class="ayarlar__dugmeler">
+      <button type="button" id="anahtar-kaydet" class="btn btn--birincil">Kaydet ve dene</button>
+      <button type="button" id="anahtar-sil" class="btn">Anahtarı sil</button>
+    </div>
+    <p id="anahtar-durum" class="ayarlar__durum" role="status"></p>
+    <h3>Engellenen kanallar</h3>
+    <ul id="engel-listesi" class="engel-listesi"></ul>
+    <div class="ayarlar__alt">
+      <button type="submit" class="btn">Kapat</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="bildirim" class="bildirim" role="status" aria-live="polite" hidden>
+  <span id="bildirim-metin"></span>
+  <button type="button" id="bildirim-geri" class="btn" hidden>Geri al</button>
 </div>
 
 <script src="app.js"></script>

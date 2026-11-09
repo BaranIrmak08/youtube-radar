@@ -29,6 +29,123 @@ const SIRALAR = {
 
 function hafizaOku(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function hafizaYaz(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* yok say */ } }
+function hafizaSil(k) { try { localStorage.removeItem(k); } catch (e) { /* yok say */ } }
+
+// Kanal engelleme ---------------------------------------------------------
+// Engel listesi depodaki data/engel.txt dosyasıdır; tarayıcı bir sonraki taramada bu kanallara hiç bakmaz.
+// Site, kullanıcının kendi GitHub anahtarıyla bu dosyaya commit atar. Anahtar yalnızca bu tarayıcıda durur.
+const DEPO = "BaranIrmak08/youtube-radar";
+const ENGEL_YOLU = "data/engel.txt";
+
+function anahtar() { return hafizaOku("radar.anahtar") || ""; }
+
+// Engellenen kanallar, liste.json bir sonraki taramada yenilenene kadar bu tarayıcıda gizli tutulur.
+function gizlilerOku() { try { return JSON.parse(hafizaOku("radar.gizli") || "{}"); } catch (e) { return {}; } }
+const gizliler = gizlilerOku();
+function gizlileriYaz() { hafizaYaz("radar.gizli", JSON.stringify(gizliler)); }
+
+async function github(yol, ayar) {
+  const r = await fetch("https://api.github.com/repos/" + DEPO + yol, {
+    ...ayar,
+    headers: { Authorization: "Bearer " + anahtar(), Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28", ...(ayar && ayar.body ? { "Content-Type": "application/json" } : {}) },
+  });
+  if (!r.ok) {
+    const e = new Error(r.status === 401 ? "anahtar geçersiz ya da süresi dolmuş"
+      : r.status === 403 || r.status === 404 ? "anahtarın bu depoya yazma izni yok"
+      : "GitHub hatası " + r.status);
+    e.durum = r.status;
+    throw e;
+  }
+  return r.json();
+}
+
+function b64Coz(s) { return new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, "")), c => c.charCodeAt(0))); }
+function b64Yap(s) { let b = ""; for (const x of new TextEncoder().encode(s)) b += String.fromCharCode(x); return btoa(b); }
+
+async function engelDosyasiOku() {
+  const d = await github("/contents/" + ENGEL_YOLU + "?ref=main");
+  return { metin: b64Coz(d.content), sha: d.sha };
+}
+
+// Dosyayı okur, değiştirir, yazar; bu arada başkası yazdıysa (409) bir kez yeniden dener.
+async function engelDosyasiDegistir(degistir, mesaj) {
+  for (let deneme = 0; ; deneme++) {
+    const { metin, sha } = await engelDosyasiOku();
+    const yeni = degistir(metin);
+    if (yeni === metin) return;
+    try {
+      await github("/contents/" + ENGEL_YOLU, { method: "PUT",
+        body: JSON.stringify({ message: mesaj, content: b64Yap(yeni), sha, branch: "main" }) });
+      return;
+    } catch (e) {
+      if (e.durum !== 409 || deneme > 0) throw e;
+    }
+  }
+}
+
+function engelSatirlari(metin) {
+  return metin.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith("#"))
+    .map(s => { const [id, ...ad] = s.split(" #"); return { id: id.trim(), ad: ad.join(" #").trim() || id.trim() }; });
+}
+
+let kuyruk = Promise.resolve();  // engelle / geri al istekleri sırayla gitsin
+function sirayaKoy(is) { kuyruk = kuyruk.then(is, is); return kuyruk; }
+
+function engelEkle(id, ad) {
+  const temizAd = (ad || "").replace(/[\r\n#]+/g, " ").trim();
+  return sirayaKoy(() => engelDosyasiDegistir(metin => {
+    if (engelSatirlari(metin).some(s => s.id === id)) return metin;
+    return metin.replace(/\s*$/, "\n") + id + " # " + temizAd + "\n";
+  }, "engel: " + temizAd));
+}
+
+function engelKaldir(id, ad) {
+  return sirayaKoy(() => engelDosyasiDegistir(metin =>
+    metin.split(/\r?\n/).filter(s => s.split(" #")[0].trim() !== id).join("\n"),
+    "engel kaldırıldı: " + (ad || id)));
+}
+
+let bildirimZamani = null;
+function bildir(metin, geriAl) {
+  const kutu = document.getElementById("bildirim"), geri = document.getElementById("bildirim-geri");
+  document.getElementById("bildirim-metin").textContent = metin;
+  geri.hidden = !geriAl;
+  geri.onclick = geriAl ? () => { kutu.hidden = true; geriAl(); } : null;
+  kutu.hidden = false;
+  clearTimeout(bildirimZamani);
+  bildirimZamani = setTimeout(() => { kutu.hidden = true; }, geriAl ? 8000 : 5000);
+}
+
+function kanaliEngelle(id, ad) {
+  gizliler[id] = ad;
+  gizlileriYaz();
+  ciz();
+  const hata = e => { delete gizliler[id]; gizlileriYaz(); ciz(); bildir("Engellenemedi: " + e.message); };
+  engelEkle(id, ad).catch(hata);
+  bildir(ad + " engellendi.", () => {
+    delete gizliler[id];
+    gizlileriYaz();
+    ciz();
+    engelKaldir(id, ad).catch(e => bildir("Geri alınamadı: " + e.message));
+  });
+}
+
+function engelDugmesi(id, ad) {
+  if (!anahtar()) return null;
+  const b = el("button", { type: "button", class: "engel-btn", title: "Kanalı engelle", "aria-label": "Kanalı engelle: " + ad });
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  for (const [etiket, nit] of [["circle", { cx: "8", cy: "8", r: "6" }], ["line", { x1: "3.8", y1: "12.2", x2: "12.2", y2: "3.8" }]]) {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", etiket);
+    for (const [k, v] of Object.entries(nit)) p.setAttribute(k, v);
+    svg.append(p);
+  }
+  b.append(svg);
+  b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); kanaliEngelle(id, ad); });
+  return b;
+}
 
 function el(etiket, ozellik, ...cocuklar) {
   const e = document.createElement(etiket);
@@ -67,6 +184,7 @@ function filtrele(v) {
   const t = document.getElementById("f-tur").value;
   const u = document.getElementById("f-ulke").value;
   const k = document.getElementById("f-kategori").value;
+  if (gizliler[v.channel_id] !== undefined) return false;
   const ara = document.getElementById("f-ara").value.trim().toLocaleLowerCase("tr");
   if (ara && !((v.title || "") + " " + (v.channel_title || "")).toLocaleLowerCase("tr").includes(ara)) return false;
   if (yasGun(v.published) > zaman) return false;
@@ -125,9 +243,15 @@ function baslikHucre([b, s, alan]) {
 }
 
 function tablo(basliklar, tbody) {
+  if (anahtar()) basliklar = [...basliklar, [el("span", { class: "visually-hidden" }, "İşlem"), "islem"]];
   return el("table", null,
     el("thead", null, el("tr", null, ...basliklar.map(baslikHucre))),
     tbody);
+}
+
+function islemHucre(id, ad) {
+  const b = engelDugmesi(id, ad);
+  return b ? el("td", { class: "hucre-islem" }, b) : null;
 }
 
 // Tablolar ---------------------------------------------------------------
@@ -141,7 +265,8 @@ function videoTablo(liste) {
       hucre("İzlenme", kisa(v.views), "olcum sag"),
       hucre("Normali", kisa(v.normal), "olcum sag"),
       hucre("Yaş", yasYaz(v.published), "olcum"),
-      hucre("Tür", el("span", { class: "etiket" }, tur(v))));
+      hucre("Tür", el("span", { class: "etiket" }, tur(v))),
+      islemHucre(v.channel_id, v.channel_title));
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
@@ -161,7 +286,8 @@ function yeniTablo(liste) {
       hucre("Kanal yaşı", k.kanal_yasi_gun == null ? "–" : Math.floor(k.kanal_yasi_gun) + " gün", "olcum sag"),
       hucre("Video", k.video_sayisi ?? "–", "olcum sag"),
       hucre("Yaş", yasYaz(v.published), "olcum"),
-      hucre("Tür", el("span", { class: "etiket" }, tur(v))));
+      hucre("Tür", el("span", { class: "etiket" }, tur(v))),
+      islemHucre(k.channel_id, k.channel_title));
     tr.addEventListener("click", () => ac(v.id));
     tbody.append(tr);
   }
@@ -176,18 +302,18 @@ function bilgi(ciftler) {
     ...ciftler.map(([d, t]) => el("div", null, el("dt", null, d), el("dd", { class: "olcum" }, t))));
 }
 
-function kart(v, ust, ciftler) {
-  const a = el("a", { class: "kart", href: ytLink(v.id), target: "_blank", rel: "noopener" });
+function kart(v, ust, ciftler, kanalId, kanalAdi) {
+  const a = el("a", { class: "kart__link", href: ytLink(v.id), target: "_blank", rel: "noopener" });
   const resim = guvenliResim(v.thumb);
   a.append(resim ? el("img", { class: "kart__resim", src: resim, alt: "", loading: "lazy", width: "320", height: "180" })
                  : el("div", { class: "kart__resim" }));
   a.append(el("div", { class: "kart__govde" }, ust, el("span", { class: "kart__baslik" }, v.title), bilgi(ciftler)));
-  return a;
+  return el("article", { class: "kart" }, a, engelDugmesi(kanalId, kanalAdi));
 }
 
 function videoKartlar(liste) {
   return el("div", { class: "kartlar" }, ...liste.map(v => kart(v, okuma(v), [
-    ["Kanal", v.channel_title], ["Yaş", yasYaz(v.published)], ["Tür", tur(v)]])));
+    ["Kanal", v.channel_title], ["Yaş", yasYaz(v.published)], ["Tür", tur(v)]], v.channel_id, v.channel_title)));
 }
 
 function yeniKartlar(liste) {
@@ -196,7 +322,7 @@ function yeniKartlar(liste) {
       el("span", { class: "okuma__toplam" }, "izlenme")), [
       ["Kanal", k.channel_title],
       ["Kanal yaşı", k.kanal_yasi_gun == null ? "?" : Math.floor(k.kanal_yasi_gun) + " gün"],
-      ["Video", k.video_sayisi ?? "?"], ["Tür", tur(k.en_iyi)]])));
+      ["Video", k.video_sayisi ?? "?"], ["Tür", tur(k.en_iyi)]], k.channel_id, k.channel_title)));
 }
 
 // CSV --------------------------------------------------------------------
@@ -335,6 +461,80 @@ async function yukle() {
   siraSecenekleri();
   ciz();
 }
+
+// Ayarlar ----------------------------------------------------------------
+
+function ayarDurumu(metin, kotu) {
+  const p = document.getElementById("anahtar-durum");
+  p.textContent = metin;
+  p.classList.toggle("kotu", !!kotu);
+}
+
+async function engelListesiCiz() {
+  const ul = document.getElementById("engel-listesi");
+  if (!anahtar()) { ul.replaceChildren(el("li", { class: "soluk" }, "Liste anahtar girilince görünür.")); return; }
+  ul.replaceChildren(el("li", { class: "soluk" }, "Yükleniyor…"));
+  try {
+    const satirlar = engelSatirlari((await engelDosyasiOku()).metin);
+    if (!satirlar.length) { ul.replaceChildren(el("li", { class: "soluk" }, "Henüz engellenen kanal yok.")); return; }
+    ul.replaceChildren(...satirlar.map(s => {
+      const b = el("button", { type: "button", class: "btn btn--kucuk" }, "Engeli kaldır");
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await engelKaldir(s.id, s.ad);
+          delete gizliler[s.id];
+          gizlileriYaz();
+          if (durum.veri) ciz();
+          engelListesiCiz();
+        } catch (e) { b.disabled = false; ayarDurumu("Kaldırılamadı: " + e.message, true); }
+      });
+      return el("li", null, el("span", null, s.ad), b);
+    }));
+  } catch (e) {
+    ul.replaceChildren(el("li", { class: "kotu" }, "Liste okunamadı: " + e.message));
+  }
+}
+
+function ayarlariAc() {
+  const kayitli = !!anahtar();
+  const g = document.getElementById("anahtar");
+  g.value = "";
+  g.placeholder = kayitli ? "Kayıtlı anahtar var, değiştirmek için yenisini yapıştır" : "github_pat_…";
+  document.getElementById("anahtar-sil").disabled = !kayitli;
+  ayarDurumu(kayitli ? "Anahtar kayıtlı. Engelle düğmeleri açık." : "");
+  document.getElementById("ayarlar").showModal();
+  engelListesiCiz();
+}
+
+async function anahtarKaydet() {
+  const deger = document.getElementById("anahtar").value.trim();
+  if (!deger) { ayarDurumu("Önce anahtarı yapıştır.", true); return; }
+  const eski = anahtar();
+  hafizaYaz("radar.anahtar", deger);
+  ayarDurumu("Deneniyor…");
+  try {
+    await engelDosyasiOku();
+    document.getElementById("anahtar").value = "";
+    document.getElementById("anahtar-sil").disabled = false;
+    ayarDurumu("Anahtar çalışıyor. Engelle düğmeleri açıldı.");
+    if (durum.veri) ciz();
+    engelListesiCiz();
+  } catch (e) {
+    if (eski) hafizaYaz("radar.anahtar", eski); else hafizaSil("radar.anahtar");
+    ayarDurumu("Olmadı: " + e.message + ".", true);
+  }
+}
+
+document.getElementById("ayarlar-ac").addEventListener("click", ayarlariAc);
+document.getElementById("anahtar-kaydet").addEventListener("click", anahtarKaydet);
+document.getElementById("anahtar-sil").addEventListener("click", () => {
+  hafizaSil("radar.anahtar");
+  document.getElementById("anahtar-sil").disabled = true;
+  ayarDurumu("Anahtar bu tarayıcıdan silindi.");
+  if (durum.veri) ciz();
+  engelListesiCiz();
+});
 
 durum.gorunum = hafizaOku("radar.gorunum") === "kart" ? "kart" : "tablo";
 for (const b of document.querySelectorAll("[data-sekme]")) b.addEventListener("click", () => {
